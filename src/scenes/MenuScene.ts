@@ -5,7 +5,8 @@ import { listSavedPatterns } from '../editor/patternStore';
 
 type MenuItem =
   | { type: 'resume' }
-  | { type: 'track'; track: any };
+  | { type: 'track'; track: any }
+  | { type: 'options' };
 
 export default class MenuScene extends Phaser.Scene {
   private hint!: Phaser.GameObjects.Text;
@@ -77,16 +78,18 @@ export default class MenuScene extends Phaser.Scene {
     // Add custom patterns
     const customPatterns = listSavedPatterns();
     customPatterns.forEach(patternName => {
-        this.menuItems.push({ 
-            type: 'track', 
-            track: { 
-                id: `custom-${patternName}`,
-                name: `${patternName}`,
-                artist: 'Editor',
-                isCustom: true 
-            }
-        });
+      this.menuItems.push({
+        type: 'track',
+        track: {
+          id: `custom-${patternName}`,
+          name: `${patternName}`,
+          artist: 'Editor',
+          isCustom: true
+        }
+      });
     });
+
+    this.menuItems.push({ type: 'options' })
 
     const savedIndex = this.registry.get('menuIndex');
     if (savedIndex !== undefined) {
@@ -125,20 +128,34 @@ export default class MenuScene extends Phaser.Scene {
       this.renderList();
     };
     this.handlePlay = () => {
-      if (this.hasStarted) return;
-      this.hasStarted = true;
+      const item = this.menuItems[this.index]
+      if (!item) return
+
+      if (item.type === 'options') {
+        this.sound.play('ui_select', { volume: 0.5 })
+        this.handleOptions()
+        return
+      }
+
+      if (this.hasStarted) return
+      this.hasStarted = true
       this.cameras.main.fadeOut(500, 0, 0, 0);
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
-        const item = this.menuItems[this.index];
-        if (!item) {
+        const fadingItem = this.menuItems[this.index]
+        if (!fadingItem) {
           this.hasStarted = false;
           return;
         }
-        if (item.type === 'resume') {
+        if (fadingItem.type === 'resume') {
           this.sound.play('ui_select', { volume: 0.5 });
           this.scene.resume('GameScene');
           this.scene.stop();
           return;
+        }
+        if (fadingItem.type !== 'track') {
+          this.hasStarted = false
+          this.cameras.main.fadeIn(300, 0, 0, 0)
+          return
         }
         if (this.resumeAvailable) {
           const proceed = window.confirm('Warning selecting a new game will end your paused game. Continue?');
@@ -151,18 +168,39 @@ export default class MenuScene extends Phaser.Scene {
         }
 
         // Handle custom vs normal tracks
-        if (item.track.isCustom) {
-          this.registry.set('selectedCustomPattern', item.track.name);
+        if (fadingItem.track.isCustom) {
+          this.registry.set('selectedCustomPattern', fadingItem.track.name);
           this.registry.set('selectedTrackId', this.tracks[0].id); // Fallback to a default track for music
         } else {
           this.registry.set('selectedCustomPattern', null);
-          this.registry.set('selectedTrackId', item.track?.id || null);
+          this.registry.set('selectedTrackId', fadingItem.track?.id || null);
         }
 
         this.sound.play('ui_select', { volume: 0.5 });
         this.scene.start('GameScene');
       });
     };
+    this.handleOptions = () => {
+      this.scene.launch('OptionsScene', { from: 'MenuScene' })
+      this.scene.bringToTop('OptionsScene')
+      this.scene.pause()
+    }
+
+    k.on('keydown-UP', this.handleUp, this)
+    k.on('keydown-DOWN', this.handleDown, this)
+    k.on('keydown-SPACE', this.handlePlay, this)
+    k.on('keydown-O', this.handleOptions, this)
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      k.off('keydown-UP', this.handleUp, this)
+      k.off('keydown-DOWN', this.handleDown, this)
+      k.off('keydown-SPACE', this.handlePlay, this)
+      k.off('keydown-O', this.handleOptions, this)
+      this.events.off(Phaser.Scenes.Events.RESUME, this.refreshModeLabel, this)
+    })
+
+    this.events.on(Phaser.Scenes.Events.RESUME, this.refreshModeLabel, this)
+
   }
 
   update(_time: number, delta: number) {
@@ -182,7 +220,14 @@ export default class MenuScene extends Phaser.Scene {
     }
     this.menuItems.forEach((item, i) => {
       const prefix = i === this.index ? '▶' : '  ';
-      const text = item.type === 'resume' ? `${prefix} Resume Game` : `${prefix} ${item.track.name} — ${item.track.artist || ''}`;
+      let text: string
+      if (item.type === 'resume') {
+        text = `${prefix} Resume Game`
+      } else if (item.type === 'options') {
+        text = `${prefix} Options`
+      } else {
+        text = `${prefix} ${item.track.name} — ${item.track.artist || ''}`
+      }
       const y = this.scale.height * 0.5 + i * 25;
       const menuItemText = this.add.text(this.scale.width / 2, y, text, {
         fontFamily: 'UiFont2, sans-serif',

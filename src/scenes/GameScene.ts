@@ -92,7 +92,7 @@ export default class GameScene extends Phaser.Scene {
   private gamepadSensitivity = this.opts.gamepadSensitivity
   private gamepadFireActive = false
   private touchMovePointerId?: number
-  private touchMoveBaselineX = 0
+  private navTarget: Phaser.Math.Vector2 | null = null
   private touchFirePointers = new Set<number>()
   private touchTapTimes: number[] = []
   private beatIndicator!: Phaser.GameObjects.Graphics;
@@ -151,6 +151,7 @@ export default class GameScene extends Phaser.Scene {
   }
   private horizontalInputActive = false
   private unlockMouseAim = false
+  private mouseNavigation = false
   private timeStopActive = false
   private timeStopResumeAt = 0
   private handleBulletWorldBounds = (body: Phaser.Physics.Arcade.Body) => {
@@ -203,6 +204,7 @@ export default class GameScene extends Phaser.Scene {
     this.verticalSafetyBand = !!this.opts.verticalSafetyBand
     this.gameplayMode = resolveGameplayMode(this.opts.gameplayMode)
     this.unlockMouseAim = !!this.opts.unlockMouseAim
+    this.mouseNavigation = !!this.opts.mouseNavigation
     this.releaseFireMode = false
     this.gamepadDeadzone = this.opts.gamepadDeadzone
     this.gamepadSensitivity = this.opts.gamepadSensitivity
@@ -360,64 +362,77 @@ export default class GameScene extends Phaser.Scene {
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       const pointerType = (pointer as any)?.pointerType ?? 'mouse'
-      if (pointerType === 'mouse') {
+      const isMouse = pointerType === 'mouse'
+
+      if (isMouse) {
         if (pointer.button === 2) {
           if (this.bombCharge >= 100) this.triggerBomb()
           return
         }
         if (pointer.button !== 0) return
       }
-      if (this.gameplayMode === 'vertical' && pointerType !== 'mouse') {
+
+      if (this.gameplayMode === 'vertical' && !isMouse) {
         const half = this.scale.width * 0.5
-        if (pointer.x < half) {
-          if (this.touchMovePointerId === undefined) {
-            this.touchMovePointerId = pointer.id
-            this.touchMoveBaselineX = pointer.x
-            const baselineIndex = this.lanes ? this.lanes.indexAt(this.player.x) : this.targetLaneIndex
-            this.touchLaneIndexBaseline = baselineIndex
-            this.touchLaneAccum = 0
-          }
-        } else {
+        if (this.touchMovePointerId === undefined || pointer.x < half) {
+          this.touchMovePointerId = pointer.id
+        }
+        this.updateNavTargetFromPointer(pointer)
+        if (pointer.x >= half) {
           this.touchFirePointers.add(pointer.id)
           this.handleFireInputDown()
           this.registerTouchTap(this.time.now)
         }
         return
       }
+
+      if (!isMouse) {
+        this.touchMovePointerId = pointer.id
+        this.updateNavTargetFromPointer(pointer)
+        this.registerTouchTap(this.time.now)
+      }
+
       this.handleFireInputDown()
     })
+
     this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
       const pointerType = (pointer as any)?.pointerType ?? 'mouse'
-      if (pointerType === 'mouse' && pointer.button === 2) return
-      if (this.gameplayMode === 'vertical' && pointerType !== 'mouse') {
+      const isMouse = pointerType === 'mouse'
+      if (isMouse && pointer.button === 2) return
+
+      if (this.gameplayMode === 'vertical' && !isMouse) {
         if (pointer.id === this.touchMovePointerId) {
           this.touchMovePointerId = undefined
-          this.touchLaneAccum = 0
+          this.navTarget = null
         }
         if (this.touchFirePointers.delete(pointer.id) && this.touchFirePointers.size === 0) {
           this.handleFireInputUp()
         }
         return
       }
+
+      if (!isMouse && pointer.id === this.touchMovePointerId) {
+        this.touchMovePointerId = undefined
+        this.navTarget = null
+      }
+
       this.handleFireInputUp()
     })
+
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       const pointerType = (pointer as any)?.pointerType ?? 'mouse'
-      if (this.gameplayMode !== 'vertical' || pointerType === 'mouse') return
-      if (pointer.id !== this.touchMovePointerId) return
-      if (!this.lanes) return
-      const deltaX = pointer.x - this.touchMoveBaselineX
-      this.touchMoveBaselineX = pointer.x
-      this.touchLaneAccum += deltaX
-      const threshold = Math.max(this.getLaneSpacing() * 0.35, 18)
-      while (Math.abs(this.touchLaneAccum) >= threshold) {
-        const dir = this.touchLaneAccum > 0 ? 1 : -1
-        const moved = this.shiftLane(dir)
-        if (!moved) {
-          this.touchLaneAccum = 0
-          break
+      const isMouse = pointerType === 'mouse'
+      if (!isMouse && pointer.id === this.touchMovePointerId) {
+        const target = this.updateNavTargetFromPointer(pointer)
+        if (this.gameplayMode === 'vertical' && this.lanes) {
+          const snap = this.lanes.nearestSnap(target.x)
+          if (snap) {
+            this.currentSnapPoint = snap
+            if (snap.type === 'lane') {
+              this.targetLaneIndex = snap.laneIndices[0]
+            }
+          }
         }
-        this.touchLaneAccum -= threshold * dir
       }
     })
 
@@ -812,6 +827,7 @@ this.lastHitAt = this.time.now
       this.crosshairMode = this.opts.crosshairMode
       this.verticalSafetyBand = !!this.opts.verticalSafetyBand
       this.unlockMouseAim = !!this.opts.unlockMouseAim
+      this.mouseNavigation = !!this.opts.mouseNavigation
       this.releaseFireMode = false
       this.padAimVector.set(0, -1)
       this.announcer.setVoice('bee')
@@ -891,15 +907,24 @@ this.lastHitAt = this.time.now
 
     this.updateMissiles(delta)
 
+    if (this.mouseNavigation) {
+      const pointer = this.input.activePointer
+      if (pointer) this.updateNavTargetFromPointer(pointer)
+    }
+
     const body = this.player.body as Phaser.Physics.Arcade.Body
     const wasdKeys = this.registry.get('wasd') as any
     let moveX = 0
     let moveY = 0
 
-    if (this.cursors.left?.isDown || wasdKeys?.A?.isDown) moveX -= 1
-    if (this.cursors.right?.isDown || wasdKeys?.D?.isDown) moveX += 1
-    if (this.cursors.up?.isDown || wasdKeys?.W?.isDown) moveY -= 1
-    if (this.cursors.down?.isDown || wasdKeys?.S?.isDown) moveY += 1
+    const allowDirectionalInputs = !this.mouseNavigation
+
+    if (allowDirectionalInputs) {
+      if (this.cursors.left?.isDown || wasdKeys?.A?.isDown) moveX -= 1
+      if (this.cursors.right?.isDown || wasdKeys?.D?.isDown) moveX += 1
+      if (this.cursors.up?.isDown || wasdKeys?.W?.isDown) moveY -= 1
+      if (this.cursors.down?.isDown || wasdKeys?.S?.isDown) moveY += 1
+    }
 
     if (this.activeGamepad && this.activeGamepad.connected) {
       const pad = this.activeGamepad
@@ -907,8 +932,10 @@ this.lastHitAt = this.time.now
       const axisY = pad.axes.length > 1 ? pad.axes[1].getValue() : 0
       const processedX = this.applyGamepadDeadzone(axisX) * this.gamepadSensitivity
       const processedY = this.applyGamepadDeadzone(axisY) * this.gamepadSensitivity
-      moveX += processedX
-      moveY += processedY
+      if (allowDirectionalInputs) {
+        moveX += processedX
+        moveY += processedY
+      }
 
       const aimAxisX = pad.axes.length > 2 ? pad.axes[2].getValue() : axisX
       const aimAxisY = pad.axes.length > 3 ? pad.axes[3].getValue() : axisY
@@ -938,7 +965,52 @@ this.lastHitAt = this.time.now
       this.handleFireInputUp()
     }
 
-    if (this.touchMovePointerId !== undefined) moveX = 0
+    const navTarget = this.navTarget
+    const touchNavActive = this.touchMovePointerId !== undefined
+    const navControlActive = navTarget && (this.mouseNavigation || touchNavActive)
+    if (navControlActive) {
+      let targetX = navTarget!.x
+      let targetY = navTarget!.y
+
+      if (this.gameplayMode === 'vertical' && this.lanes) {
+        const snap = this.lanes.nearestSnap(navTarget!.x)
+        if (snap) {
+          this.currentSnapPoint = snap
+          let laneIdx: number | undefined
+          if (snap.type === 'lane') {
+            laneIdx = snap.laneIndices[0]
+          } else if (snap.laneIndices.length > 0) {
+            laneIdx = snap.laneIndices.reduce((best, idx) => {
+              const bestDelta = Math.abs(this.lanes!.centerX(best) - navTarget!.x)
+              const candidateDelta = Math.abs(this.lanes!.centerX(idx) - navTarget!.x)
+              return candidateDelta < bestDelta ? idx : best
+            }, snap.laneIndices[0])
+          }
+          if (laneIdx !== undefined) {
+            this.targetLaneIndex = laneIdx
+            targetX = this.lanes.centerX(laneIdx)
+          } else {
+            targetX = snap.centerX
+          }
+        }
+      }
+
+      const dx = targetX - this.player.x
+      const dy = targetY - this.player.y
+      const navDeadzone = this.gameplayMode === 'vertical'
+        ? this.laneDeadzonePx + 2
+        : 4
+      const distance = Math.hypot(dx, dy)
+      if (distance > navDeadzone) {
+        moveX = dx
+        moveY = dy
+      } else {
+        moveX = 0
+        moveY = 0
+      }
+    } else if (this.gameplayMode === 'vertical' && touchNavActive) {
+      moveX = 0
+    }
 
     this.horizontalInputActive = Math.abs(moveX) > 0.1
 
@@ -1667,6 +1739,12 @@ pskin?.setThrust?.(thrustLevel)
       this.touchTapTimes = []
       if (this.bombCharge >= 100) this.triggerBomb()
     }
+  }
+
+  private updateNavTargetFromPointer(pointer: Phaser.Input.Pointer): Phaser.Math.Vector2 {
+    const target = this.navTarget ?? (this.navTarget = new Phaser.Math.Vector2())
+    this.cameras.main.getWorldPoint(pointer.x, pointer.y, target)
+    return target
   }
 
   private updateMovementBounds() {
