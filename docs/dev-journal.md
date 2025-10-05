@@ -52,3 +52,18 @@ This journal tracks the development progress of Beat Blaster 2.
 
 ---
 
+### Task ID: [GAMEPLAY-004]
+
+- **Start Time:** [2025-10-06 08:15:00]
+- **End Time:** [In Progress]
+- **Status:** [In Progress]
+- **Notes/Blockers:** 
+  - Planning difficulty calibration workflow (latency test, tuning UI, persistence).
+- **Associated Files:**
+  - `tasks/gameplay/implement_difficulty_calibration.md`
+  - `src/scenes/OptionsScene.ts`
+  - `src/systems/Options.ts`
+- **Commit Hash:** `[pending]`
+
+---
+
