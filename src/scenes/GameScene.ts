@@ -94,7 +94,7 @@ export default class GameScene extends Phaser.Scene {
   private touchMovePointerId?: number
   private navTarget: Phaser.Math.Vector2 | null = null
   private touchFirePointers = new Set<number>()
-  private touchTapTimes: number[] = []
+  private tapTimes: number[] = []
   private beatIndicator!: Phaser.GameObjects.Graphics;
   private beatStatusSearching?: Phaser.GameObjects.Text
   private beatStatusDetected?: Phaser.GameObjects.Text
@@ -103,13 +103,13 @@ export default class GameScene extends Phaser.Scene {
   private lastHitEnemyId: string | null = null
   private neon!: NeonGrid
   private powerupDurations: Record<PowerupType, number> = {
-    shield: 8,
-    rapid: 10,
-    split: 15,
-    slowmo: 5,
-    chain_lightning: 10,
-    homing_missiles: 12,
-    time_stop: 4
+    shield: 12,
+    rapid: 15,
+    split: 22,
+    slowmo: 8,
+    chain_lightning: 15,
+    homing_missiles: 18,
+    time_stop: 6
   }
   private activePowerups = new Set<PowerupSprite>()
   private enemyLifecycle!: EnemyLifecycle
@@ -370,6 +370,7 @@ export default class GameScene extends Phaser.Scene {
           return
         }
         if (pointer.button !== 0) return
+        if (this.mouseNavigation) this.registerTouchTap(this.time.now)
       }
 
       if (this.gameplayMode === 'vertical' && !isMouse) {
@@ -608,7 +609,8 @@ export default class GameScene extends Phaser.Scene {
         stage: this.currentStageConfig,
         waveDirector: this.waveDirector,
         getLaneManager: () => this.lanes,
-        requestLaneCount: (count, effect) => this.applyLanePatternCount(count, effect)
+        requestLaneCount: (count, effect) => this.applyLanePatternCount(count, effect),
+        registerDescriptor: (descriptor) => this.waveDescriptorIndex.set(descriptor.id, descriptor)
       })
 
       const customPatternName = this.registry.get('selectedCustomPattern');
@@ -617,7 +619,7 @@ export default class GameScene extends Phaser.Scene {
         if (patternData) {
             console.log(`Loading custom pattern: ${customPatternName}`);
             const customPattern = new CustomPattern(this, this.difficultyProfile, this.currentStageConfig, customPatternName, patternData);
-            this.lanePattern.loadPattern(customPattern);
+            this.lanePattern.loadPattern(customPattern, true);
         }
       }
 
@@ -1230,7 +1232,7 @@ pskin?.setThrust?.(thrustLevel)
     bullet.setScale(0.55)
 
     bullet.setData('spawnTime', this.time.now)
-    bullet.setData('damage', metadata?.damage ?? 1)
+    bullet.setData('damage', metadata?.damage ?? 1.5)
     bullet.setData('judgement', metadata?.judgement ?? 'normal')
     bullet.setData('accuracy', metadata?.accuracy ?? 'Offbeat')
     bullet.setData('isPerfect', metadata?.isPerfect ?? false)
@@ -1243,7 +1245,7 @@ pskin?.setThrust?.(thrustLevel)
 
   private buildBulletMetadata(accuracy: AccuracyLevel, judgement: BeatJudgement): BulletMetadata {
     const isPerfect = accuracy === 'Perfect' && judgement === 'perfect'
-    let damage = 1
+    let damage = 1.5
     if (isPerfect) damage += 1
     return {
       damage,
@@ -1258,7 +1260,7 @@ pskin?.setThrust?.(thrustLevel)
     const judgementRaw = bullet.getData('judgement') as BeatJudgement | undefined
     const accuracyRaw = bullet.getData('accuracy') as AccuracyLevel | undefined
     const isPerfect = bullet.getData('isPerfect') === true
-    const damage = Number.isFinite(damageRaw) && damageRaw > 0 ? damageRaw : 1
+    const damage = Number.isFinite(damageRaw) && damageRaw > 0 ? damageRaw : 1.5
     return {
       damage,
       judgement: judgementRaw ?? (isPerfect ? 'perfect' : 'normal'),
@@ -1733,10 +1735,10 @@ pskin?.setThrust?.(thrustLevel)
   }
 
   private registerTouchTap(time: number) {
-    this.touchTapTimes = this.touchTapTimes.filter(t => time - t < 500)
-    this.touchTapTimes.push(time)
-    if (this.touchTapTimes.length >= 2) {
-      this.touchTapTimes = []
+    this.tapTimes = this.tapTimes.filter(t => time - t < 500)
+    this.tapTimes.push(time)
+    if (this.tapTimes.length >= 2) {
+      this.tapTimes = []
       if (this.bombCharge >= 100) this.triggerBomb()
     }
   }

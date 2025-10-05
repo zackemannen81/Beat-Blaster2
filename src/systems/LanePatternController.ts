@@ -6,6 +6,8 @@ import { EnemyType } from '../config/enemyStyles';
 import { WaveDescriptor, WaveCategory } from '../types/waves';
 import { BaseLanePattern } from './patterns/BaseLanePattern';
 import { ClassicPattern } from './patterns/ClassicPattern';
+import { CrescendoPattern } from './patterns/CrescendoPattern';
+import { SyncopationPattern } from './patterns/SyncopationPattern';
 
 export type LaneEffect = 'collapse' | 'expand' | 'pulse';
 
@@ -16,6 +18,7 @@ export interface LanePatternControllerOptions {
   waveDirector: WaveDirector;
   getLaneManager: () => LaneManager | undefined;
   requestLaneCount: (count: 3 | 5 | 7, effect?: LaneEffect) => void;
+  registerDescriptor?: (descriptor: WaveDescriptor) => void;
 }
 
 export type LaneRef =
@@ -111,17 +114,17 @@ export interface BeatStep {
 }
 
 const DIFFICULTY_COUNT: Record<DifficultyProfileId, number> = {
-  easy: 0.75,
-  normal: 1,
-  hard: 1.35,
-  wip: 1,
+  easy: 0.46,
+  normal: 0.65,
+  hard: 0.89,
+  wip: 0.46,
 };
 
 const DIFFICULTY_SPEED: Record<DifficultyProfileId, number> = {
-  easy: 0.9,
-  normal: 1,
-  hard: 1.18,
-  wip: 1,
+  easy: 0.68,
+  normal: 0.84,
+  hard: 1,
+  wip: 0.68,
 };
 
 export default class LanePatternController {
@@ -129,35 +132,48 @@ export default class LanePatternController {
   private waveDirector: WaveDirector;
   private getLaneManager: () => LaneManager | undefined;
   private requestLaneCount: (count: 3 | 5 | 7, effect?: LaneEffect) => void;
+  private registerDescriptor?: (descriptor: WaveDescriptor) => void;
   private beatIndex = 0;
   private cycleIndex = 0;
   private currentLaneCount: 3 | 5 | 7 = 3;
   private sequence = 0;
+  private difficulty: DifficultyProfile;
+  private stage: StageTuning;
   private countMultiplier: number;
   private speedMultiplier: number;
   private stageCountMultiplier: number;
   private stageSpeedMultiplier: number;
-  private activePattern: BaseLanePattern;
+  private patternFactories: Array<() => BaseLanePattern> = [];
+  private patternIndex = 0;
+  private rotationLocked = false;
+  private activePattern!: BaseLanePattern;
 
   constructor(options: LanePatternControllerOptions) {
     this.scene = options.scene;
     this.waveDirector = options.waveDirector;
     this.getLaneManager = options.getLaneManager;
     this.requestLaneCount = options.requestLaneCount;
+    this.registerDescriptor = options.registerDescriptor;
+    this.difficulty = options.difficulty;
+    this.stage = options.stage;
 
-    this.countMultiplier = DIFFICULTY_COUNT[options.difficulty.id];
-    this.speedMultiplier = DIFFICULTY_SPEED[options.difficulty.id];
-    this.stageCountMultiplier = Math.max(0.6, options.stage.spawnMultiplier ?? 1);
-    this.stageSpeedMultiplier = Math.max(0.7, options.stage.scrollMultiplier ?? 1);
-    
-    // Default to ClassicPattern, but this can be changed
-    this.activePattern = new ClassicPattern(this.scene, options.difficulty, options.stage);
+    this.countMultiplier = DIFFICULTY_COUNT[this.difficulty.id];
+    this.speedMultiplier = DIFFICULTY_SPEED[this.difficulty.id];
+    this.stageCountMultiplier = Math.max(0.6, this.stage.spawnMultiplier ?? 1);
+    this.stageSpeedMultiplier = Math.max(0.7, this.stage.scrollMultiplier ?? 1);
+
+    this.rebuildPatternRotation();
+    const initialIndex = this.patternFactories.length > 1
+      ? Phaser.Math.Between(0, this.patternFactories.length - 1)
+      : 0;
+    this.useBuiltInPattern(initialIndex);
   }
 
-  public loadPattern(pattern: BaseLanePattern) {
+  public loadPattern(pattern: BaseLanePattern, lockRotation = false) {
     this.activePattern = pattern;
     this.beatIndex = 0;
     this.cycleIndex = 0;
+    this.rotationLocked = lockRotation;
   }
 
   handleBeat(band: 'low' | 'mid' | 'high'): boolean {
@@ -187,13 +203,60 @@ export default class LanePatternController {
       this.cycleIndex += 1;
       this.sequence = 0;
       this.scene.events.emit('patternCycleCompleted', { cycleIndex: this.cycleIndex });
+      if (!this.rotationLocked) {
+        this.advancePattern();
+      }
     }
     return true;
   }
 
   updateStage(stage: StageTuning) {
+    this.stage = stage;
     this.stageCountMultiplier = Math.max(0.6, stage.spawnMultiplier ?? 1);
     this.stageSpeedMultiplier = Math.max(0.7, stage.scrollMultiplier ?? 1);
+    if (!this.rotationLocked) {
+      const preservedIndex = this.patternIndex;
+      this.rebuildPatternRotation();
+      this.useBuiltInPattern(preservedIndex);
+    }
+  }
+
+  private rebuildPatternRotation() {
+    const createClassic = () => new ClassicPattern(this.scene, this.difficulty, this.stage);
+    const createCrescendo = () => new CrescendoPattern(this.scene, this.difficulty, this.stage);
+    const createSyncopation = () => new SyncopationPattern(this.scene, this.difficulty, this.stage);
+
+    if (this.difficulty.id === 'easy' || this.difficulty.id === 'wip') {
+      this.patternFactories = [createClassic, createClassic, createCrescendo];
+    } else if (this.difficulty.id === 'normal') {
+      this.patternFactories = [createClassic, createCrescendo, createClassic, createSyncopation];
+    } else {
+      this.patternFactories = [createClassic, createCrescendo, createSyncopation];
+    }
+
+    if (this.patternFactories.length === 0) {
+      this.patternFactories = [createClassic];
+    }
+  }
+
+  private useBuiltInPattern(targetIndex: number) {
+    if (this.patternFactories.length === 0) {
+      this.patternFactories = [() => new ClassicPattern(this.scene, this.difficulty, this.stage)];
+      this.loadPattern(this.patternFactories[0]());
+      this.patternIndex = 0;
+      return;
+    }
+
+    const length = this.patternFactories.length;
+    const normalized = ((targetIndex % length) + length) % length;
+    this.patternIndex = normalized;
+    const pattern = this.patternFactories[this.patternIndex]();
+    this.loadPattern(pattern);
+  }
+
+  private advancePattern() {
+    if (this.rotationLocked || this.patternFactories.length === 0) return;
+    this.useBuiltInPattern(this.patternIndex + 1);
   }
 
   private resolveCount(base: number): number {
@@ -249,6 +312,7 @@ export default class LanePatternController {
         formationParams: { laneIndex },
         category: spawn.category ?? 'standard',
       };
+      this.registerDescriptor?.(descriptor);
       this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false, force: true });
     });
   }
@@ -265,6 +329,7 @@ export default class LanePatternController {
       formationParams: { laneA, laneB, hopEveryBeats: spawn.hopEvery ?? 1 },
       category: spawn.category ?? 'standard',
     };
+    this.registerDescriptor?.(descriptor);
     this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false, force: true });
   }
 
@@ -282,6 +347,7 @@ export default class LanePatternController {
       },
       category: spawn.category ?? 'standard',
     };
+    this.registerDescriptor?.(descriptor);
     this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false, force: true });
   }
 
@@ -300,6 +366,7 @@ export default class LanePatternController {
       },
       category: spawn.category ?? 'standard',
     };
+    this.registerDescriptor?.(descriptor);
     this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false, force: true });
   }
 
@@ -319,6 +386,7 @@ export default class LanePatternController {
       },
       category: spawn.category ?? 'heavy',
     };
+    this.registerDescriptor?.(descriptor);
     this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false, force: true });
   }
 
@@ -337,6 +405,7 @@ export default class LanePatternController {
       },
       category: spawn.category ?? 'standard',
     };
+    this.registerDescriptor?.(descriptor);
     this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false, force: true });
   }
 
@@ -354,6 +423,7 @@ export default class LanePatternController {
       },
       category: spawn.category ?? 'heavy',
     };
+    this.registerDescriptor?.(descriptor);
     this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false, force: true });
   }
 
@@ -372,6 +442,7 @@ export default class LanePatternController {
       },
       category: spawn.category ?? 'heavy',
     };
+    this.registerDescriptor?.(descriptor);
     this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false });
   }
 
