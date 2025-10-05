@@ -13,7 +13,14 @@ This document outlines planned features and future considerations for Beat Blast
 
 ## Power-ups
 
-- **Overdrive:** A new power-up that increases the player's damage and fire rate for a short period of time.
+- **Time Stop:** A power-up that temporarily stops time for all enemies.
+
+## Level Editor
+
+- **Beat Navigation:** UI controls for cycling through beats (previous/next).
+- **Beat Filtering:** Filter beats by type (e.g., 'normal', 'long', 'special') and properties (e.g., 'color', 'duration').
+- **Lane Management:** UI controls for creating, deleting, and reordering lanes.
+- **Enemy Pattern Definition System:** A visual editor for creating and editing enemy patterns, including sequence, timing, and lane assignment.
 
 ## UI/UX
 

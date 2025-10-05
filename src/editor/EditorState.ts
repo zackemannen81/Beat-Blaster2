@@ -32,11 +32,16 @@ export class EditorState {
   private history: HistoryService;
   private pattern: BeatStep[] = [];
   private activeBeatIndex = 0;
+  private beatTypeFilter: string = 'all';
 
   constructor(historyService: HistoryService) {
     this.history = historyService;
     // Initialize with a 16-beat empty pattern
     this.pattern = Array(16).fill(null).map(() => ({ spawns: [] }));
+  }
+
+  public setBeatTypeFilter(filter: string) {
+    this.beatTypeFilter = filter;
   }
 
   public addSpawn(spawn: SpawnAction) {
@@ -49,6 +54,10 @@ export class EditorState {
   }
 
   public getPattern(): Readonly<BeatStep[]> {
+    if (this.beatTypeFilter === 'all') {
+      return this.pattern;
+    }
+    // TODO: Implement beat filtering based on beat properties
     return this.pattern;
   }
 

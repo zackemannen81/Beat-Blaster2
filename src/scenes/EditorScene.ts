@@ -27,10 +27,37 @@ export default class EditorScene extends Phaser.Scene {
     this.editorState = new EditorState(this.historyService);
 
     this.add.text(50, 50, 'Beat Blaster Editor', { color: '#ffffff', fontSize: '32px' });
-    this.beatIndexText = this.add.text(50, 100, `Beat: 0`, { color: '#cccccc', fontSize: '24px' });
+    this.beatIndexText = this.add.text(150, 100, `Beat: 0`, { color: '#cccccc', fontSize: '24px' });
+
+    const prevBeatButton = this.add.text(50, 100, '< Prev', { color: '#0f0', backgroundColor: '#555' }).setPadding(5).setInteractive();
+    prevBeatButton.on('pointerdown', () => {
+      const currentIndex = this.editorState.getCurrentBeatIndex();
+      this.editorState.setActiveBeat(currentIndex - 1);
+      this.renderState();
+    });
+
+    const nextBeatButton = this.add.text(250, 100, 'Next >', { color: '#0f0', backgroundColor: '#555' }).setPadding(5).setInteractive();
+    nextBeatButton.on('pointerdown', () => {
+      const currentIndex = this.editorState.getCurrentBeatIndex();
+      this.editorState.setActiveBeat(currentIndex + 1);
+      this.renderState();
+    });
     this.add.text(50, 150, 'Left/Right to navigate beats', { color: '#aaaaaa' });
     this.add.text(50, 190, 'Cmd/Ctrl+Z to Undo', { color: '#aaaaaa' });
-    this.add.text(50, 210, 'Press ESC to return', { color: '#aaaaaa' });
+    this.add.text(50, 230, 'Press ESC to return', { color: '#aaaaaa' });
+
+    const beatTypeFilter = this.add.dom(50, 260, 'select', 'width: 150px');
+    beatTypeFilter.node.innerHTML = `
+      <option value="all">All Beats</option>
+      <option value="normal">Normal</option>
+      <option value="long">Long</option>
+      <option value="special">Special</option>
+    `;
+    beatTypeFilter.addListener('change');
+    beatTypeFilter.on('change', (event: any) => {
+      this.editorState.setBeatTypeFilter(event.target.value);
+      this.renderState();
+    });
 
     const saveButton = this.add.text(700, 50, 'Save', { color: '#0f0', backgroundColor: '#555' }).setPadding(5).setInteractive();
     saveButton.on('pointerdown', () => this.handleSave());
