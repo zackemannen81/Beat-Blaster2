@@ -94,7 +94,7 @@ export default class GameScene extends Phaser.Scene {
   private touchMovePointerId?: number
   private navTarget: Phaser.Math.Vector2 | null = null
   private touchFirePointers = new Set<number>()
-  private touchTapTimes: number[] = []
+  private tapTimes: number[] = []
   private beatIndicator!: Phaser.GameObjects.Graphics;
   private beatStatusSearching?: Phaser.GameObjects.Text
   private beatStatusDetected?: Phaser.GameObjects.Text
@@ -370,6 +370,7 @@ export default class GameScene extends Phaser.Scene {
           return
         }
         if (pointer.button !== 0) return
+        if (this.mouseNavigation) this.registerTouchTap(this.time.now)
       }
 
       if (this.gameplayMode === 'vertical' && !isMouse) {
@@ -1734,10 +1735,10 @@ pskin?.setThrust?.(thrustLevel)
   }
 
   private registerTouchTap(time: number) {
-    this.touchTapTimes = this.touchTapTimes.filter(t => time - t < 500)
-    this.touchTapTimes.push(time)
-    if (this.touchTapTimes.length >= 2) {
-      this.touchTapTimes = []
+    this.tapTimes = this.tapTimes.filter(t => time - t < 500)
+    this.tapTimes.push(time)
+    if (this.tapTimes.length >= 2) {
+      this.tapTimes = []
       if (this.bombCharge >= 100) this.triggerBomb()
     }
   }
