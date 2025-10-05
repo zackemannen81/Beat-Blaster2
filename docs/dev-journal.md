@@ -55,15 +55,32 @@ This journal tracks the development progress of Beat Blaster 2.
 ### Task ID: [GAMEPLAY-004]
 
 - **Start Time:** [2025-10-06 08:15:00]
-- **End Time:** [In Progress]
-- **Status:** [In Progress]
+- **End Time:** [2025-10-06 16:40:00]
+- **Status:** [Completed]
 - **Notes/Blockers:** 
-  - Planning difficulty calibration workflow (latency test, tuning UI, persistence).
+  - Reworked difficulty profiles and lane pattern scaling for calibrated pacing.
+  - Registered dynamic wave descriptors so HUD/announcer reflect correct formations.
+  - Added double-click bomb support for mouse navigation and extended (but balanced) power-up durations.
 - **Associated Files:**
   - `tasks/gameplay/implement_difficulty_calibration.md`
-  - `src/scenes/OptionsScene.ts`
-  - `src/systems/Options.ts`
+  - `src/config/difficultyProfiles.ts`
+  - `src/scenes/GameScene.ts`
+  - `src/systems/LanePatternController.ts`
 - **Commit Hash:** `[pending]`
 
 ---
 
+### Task ID: [GAMEPLAY-005]
+
+- **Start Time:** [2025-10-06 16:45:00]
+- **End Time:** [In Progress]
+- **Status:** [In Progress]
+- **Notes/Blockers:** 
+  - Planning power-up label styling that stays readable without cluttering gameplay.
+- **Associated Files:**
+  - `tasks/gameplay/enhance_powerup_visibility.md`
+  - `src/scenes/GameScene.ts`
+  - `src/ui/HUD.ts`
+- **Commit Hash:** `[pending]`
+
+---
