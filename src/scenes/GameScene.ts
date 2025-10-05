@@ -111,6 +111,15 @@ export default class GameScene extends Phaser.Scene {
     homing_missiles: 18,
     time_stop: 6
   }
+  private powerupLabels: Record<PowerupType, string> = {
+    shield: 'Shield',
+    rapid: 'Rapid',
+    split: 'Split',
+    slowmo: 'Slowmo',
+    chain_lightning: 'Chain',
+    homing_missiles: 'Homing',
+    time_stop: 'Time Stop'
+  }
   private activePowerups = new Set<PowerupSprite>()
   private enemyLifecycle!: EnemyLifecycle
   private waveDescriptorIndex = new Map<string, WaveDescriptor>()
@@ -1319,6 +1328,18 @@ pskin?.setThrust?.(thrustLevel)
     s.body.setDrag(38, 0)
     this.activePowerups.add(s)
 
+    const labelColor = this.opts.highContrast ? '#ffffff' : '#ffe27a'
+    const strokeColor = this.opts.highContrast ? '#000000' : '#0a0a0f'
+    const label = this.add.text(x, y + s.displayHeight * 0.5 + 6, this.resolvePowerupLabel(type), {
+      fontFamily: 'UiFont',
+      fontSize: '12px',
+      color: labelColor,
+      stroke: strokeColor,
+      strokeThickness: 3
+    }).setOrigin(0.5, 0)
+    label.setDepth(5)
+    s.setData('labelText', label)
+
     const glow = this.add.image(x, y, 'plasma_glow_disc')
       .setDepth(3)
       .setBlendMode(Phaser.BlendModes.ADD)
@@ -1327,6 +1348,8 @@ pskin?.setThrust?.(thrustLevel)
     const glowFollow = () => {
       glow.x = s.x
       glow.y = s.y
+      label.x = s.x
+      label.y = s.y + s.displayHeight * 0.5 + 6
     }
     this.events.on(Phaser.Scenes.Events.UPDATE, glowFollow)
     const cleanupGlow = () => {
@@ -1387,6 +1410,7 @@ pskin?.setThrust?.(thrustLevel)
       glowTween.stop()
       fadeTween.stop()
       cleanupGlow()
+      label.destroy()
     })
   }
 
@@ -1439,6 +1463,10 @@ pskin?.setThrust?.(thrustLevel)
     const texture = this.textures.exists(textureKey) ? textureKey : fallbackTexture
     const anim = this.anims.exists(animKey) ? animKey : fallbackAnim
     return { texture, anim }
+  }
+
+  private resolvePowerupLabel(type: PowerupType) {
+    return this.powerupLabels[type] ?? type.replace(/_/g, ' ').toUpperCase()
   }
 
   private applyDamageToEnemy(
