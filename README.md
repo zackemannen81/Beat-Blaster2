@@ -1,13 +1,14 @@
 # Beat Blaster 2
 
-A rhythm-based game with a level editor.
+A rhythm-based vertical shooter with a level editor.
 
 ## Features
 
-- Core Gameplay
-- Level Editor
-- Score System
-- Audio Integration
+- **Rhythm-Based Gameplay:** Enemy spawns, visual effects, and scoring are all driven by the beat of the music.
+- **Vertical Scrolling:** Navigate your ship through waves of enemies in a vertical scrolling environment.
+- **Power-ups:** Collect power-ups to enhance your ship's abilities, including shields, rapid fire, split shot, and slow motion.
+- **Bomb:** Charge up a powerful bomb to clear the screen of enemies.
+- **Level Editor:** Create your own levels with the built-in level editor.
 
 ## Installation
 
@@ -18,14 +19,27 @@ A rhythm-based game with a level editor.
 
 ## Usage
 
-### Game Controls
+### Controls
 
-- Arrow keys to move
-- Space to shoot
+- **Movement:**
+    - **Keyboard:** WASD or arrow keys
+    - **Gamepad:** Left stick
+    - **Touch:** Drag on the left side of the screen
+- **Aiming:**
+    - **Mouse:** Mouse cursor
+    - **Gamepad:** Right stick
+- **Shooting:**
+    - **Mouse:** Left-click
+    - **Gamepad:** Right trigger
+    - **Touch:** Tap on the right side of the screen
+- **Bomb:**
+    - **Keyboard:** Spacebar
+    - **Gamepad:** Right bumper or right trigger
+    - **Touch:** Double-tap on the right side of the screen
 
-### Editor Controls
+### Level Editor
 
-- To be defined
+- To access the level editor, press the `E` key during gameplay.
 
 ## Contributing
 
