@@ -32,11 +32,48 @@ export class EditorState {
   private history: HistoryService;
   private pattern: BeatStep[] = [];
   private activeBeatIndex = 0;
+  private beatTypeFilter: string = 'all';
+  private lanes: any[] = [];
 
   constructor(historyService: HistoryService) {
     this.history = historyService;
     // Initialize with a 16-beat empty pattern
     this.pattern = Array(16).fill(null).map(() => ({ spawns: [] }));
+    // Initialize with 3 lanes
+    this.lanes = [
+      { id: 1, position: 0, type: 'normal' },
+      { id: 2, position: 1, type: 'normal' },
+      { id: 3, position: 2, type: 'normal' },
+    ];
+  }
+
+  public setBeatTypeFilter(filter: string) {
+    this.beatTypeFilter = filter;
+  }
+
+  public addLane() {
+    const newLane = { id: this.lanes.length + 1, position: this.lanes.length, type: 'normal' };
+    this.lanes.push(newLane);
+  }
+
+  public removeLane() {
+    if (this.lanes.length > 1) {
+      this.lanes.pop();
+    }
+  }
+
+  public moveLane(direction: number) {
+    const selectedLane = this.lanes.find(lane => lane.position === this.activeBeatIndex);
+    if (selectedLane) {
+      const newPosition = selectedLane.position + direction;
+      if (newPosition >= 0 && newPosition < this.lanes.length) {
+        const otherLane = this.lanes.find(lane => lane.position === newPosition);
+        if (otherLane) {
+          otherLane.position -= direction;
+        }
+        selectedLane.position = newPosition;
+      }
+    }
   }
 
   public addSpawn(spawn: SpawnAction) {
@@ -49,7 +86,15 @@ export class EditorState {
   }
 
   public getPattern(): Readonly<BeatStep[]> {
+    if (this.beatTypeFilter === 'all') {
+      return this.pattern;
+    }
+    // TODO: Implement beat filtering based on beat properties
     return this.pattern;
+  }
+
+  public getLanes(): any[] {
+    return this.lanes;
   }
 
   public getCurrentBeatIndex(): number {

@@ -5,7 +5,7 @@ import Spawner, { PatternData } from '../systems/Spawner'
 import Scoring, { AccuracyLevel } from '../systems/Scoring'
 import HUD from '../ui/HUD'
 import Effects from '../systems/Effects'
-import Powerups, { PowerupType } from '../systems/Powerups'
+import Powerups, { PowerupType, PowerupEvent } from '../systems/Powerups'
 import Starfield from '../systems/Starfield'
 import BackgroundScroller from '../systems/BackgroundScroller'
 import { loadOptions, resolveGameplayMode, GameplayMode } from '../systems/Options'
@@ -28,6 +28,7 @@ import { CustomPattern } from '../systems/patterns/CustomPattern';
 
  type Enemy = Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
 type PowerupSprite = Phaser.Physics.Arcade.Sprite;
+type MissileSprite = Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
 type BulletMetadata = {
   damage: number
   judgement: BeatJudgement
@@ -46,11 +47,14 @@ export default class GameScene extends Phaser.Scene {
   private beatWindow = new BeatWindow()
   private music?: Phaser.Sound.BaseSound
   private bullets!: Phaser.Physics.Arcade.Group
+  private missiles!: Phaser.Physics.Arcade.Group
   private isShooting = false
   private lastShotAt = 0
   private bulletSpeed = 900
   private bulletTtlMs = 1000
   private fireCooldownMs = 50
+  private homingMissileSpeed = 540
+  private lastMissileSpawnAt = 0
   private effects!: Effects
   private powerups!: Powerups
   private playerHp = 3
@@ -102,7 +106,10 @@ export default class GameScene extends Phaser.Scene {
     shield: 8,
     rapid: 10,
     split: 15,
-    slowmo: 5
+    slowmo: 5,
+    chain_lightning: 10,
+    homing_missiles: 12,
+    time_stop: 4
   }
   private activePowerups = new Set<PowerupSprite>()
   private enemyLifecycle!: EnemyLifecycle
@@ -144,6 +151,20 @@ export default class GameScene extends Phaser.Scene {
   }
   private horizontalInputActive = false
   private unlockMouseAim = false
+  private timeStopActive = false
+  private timeStopResumeAt = 0
+  private handleBulletWorldBounds = (body: Phaser.Physics.Arcade.Body) => {
+    const bullet = body.gameObject as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody | undefined
+    if (!bullet) return
+    if (!this.bullets.contains(bullet)) return
+    this.disableBullet(bullet)
+  }
+  private handleMissileWorldBounds = (body: Phaser.Physics.Arcade.Body) => {
+    const missile = body.gameObject as MissileSprite | undefined
+    if (!missile) return
+    if (!this.missiles.contains(missile)) return
+    this.disableMissile(missile)
+  }
 
   private cleanupEnemy(enemy: Enemy, doDeathFx = true) {
     const enemyId = (enemy.getData('eid') as string) ?? null
@@ -164,6 +185,10 @@ export default class GameScene extends Phaser.Scene {
     const floodRect = enemy.getData('flooderRect') as Phaser.GameObjects.Rectangle | undefined
     floodRect?.destroy()
     enemy.setData('flooderRect', null)
+    enemy.setData('timeStopStored', false)
+    enemy.setData('timeStopPausedTween', false)
+    enemy.setData('timeStopVelX', undefined)
+    enemy.setData('timeStopVelY', undefined)
 
     enemy.disableBody(true, true)
   }
@@ -287,16 +312,34 @@ export default class GameScene extends Phaser.Scene {
       this.playerMaxHp = balance.player.hp ?? this.playerMaxHp
       this.playerHp = this.playerMaxHp
     }
+    const durationConfig = balance?.powerups?.durations as Partial<Record<PowerupType, number>> | undefined
+    if (durationConfig) {
+      (Object.keys(this.powerupDurations) as PowerupType[]).forEach((type) => {
+        const configured = durationConfig[type]
+        if (typeof configured === 'number' && configured > 0) {
+          this.powerupDurations[type] = configured
+        }
+      })
+    }
 
-    // Bullets group & fire mode
+    // Bullets & missiles
     this.bullets = this.physics.add.group({
       classType: Phaser.Physics.Arcade.Sprite,
       defaultKey: 'bullet_plasma_0',
       maxSize: 200
     })
+    this.missiles = this.physics.add.group({
+      classType: Phaser.Physics.Arcade.Sprite,
+      defaultKey: 'bullet_plasma_0',
+      maxSize: 60
+    })
     this.physics.world.on('worldbounds', this.handleBulletWorldBounds, this)
+    this.physics.world.on('worldbounds', this.handleMissileWorldBounds, this)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      if (this.physics.world) this.physics.world.off('worldbounds', this.handleBulletWorldBounds, this)
+      if (this.physics.world) {
+        this.physics.world.off('worldbounds', this.handleBulletWorldBounds, this)
+        this.physics.world.off('worldbounds', this.handleMissileWorldBounds, this)
+      }
       this.music?.stop()
       this.music?.destroy()
       this.music = undefined
@@ -417,23 +460,25 @@ export default class GameScene extends Phaser.Scene {
         if (this.gameplayMode === 'vertical') this.triggerLaneHopperHop()
       }
       const usingPattern = this.gameplayMode === 'vertical' && !!this.lanePattern
-      if (usingPattern) {
+      if (usingPattern && !this.timeStopActive) {
         this.lanePattern?.handleBeat(band)
       }
-      this.updateExplodersOnBeat(band)
-      this.updateTeleportersOnBeat(band)
-      this.updateWeaversOnBeat(band)
-      this.updateFormationDancersOnBeat(band)
-      this.updateMirrorersOnBeat(band)
+      if (!this.timeStopActive) {
+        this.updateExplodersOnBeat(band)
+        this.updateTeleportersOnBeat(band)
+        this.updateWeaversOnBeat(band)
+        this.updateFormationDancersOnBeat(band)
+        this.updateMirrorersOnBeat(band)
+      }
       this.neon?.onBeat(band)
       this.hud?.flashBeat(band)
       if (!this.beatStatusDetectedShown) {
         this.onBeatDetection()
       }
-      if (!usingPattern) {
+      if (!usingPattern && !this.timeStopActive) {
         this.waveDirector.enqueueBeat(band)
       }
-      if (pulse) this.pulseEnemies()
+      if (pulse && !this.timeStopActive) this.pulseEnemies()
     }
 
     this.analyzer.on('beat:low', () => handleBeat('low', true))
@@ -620,6 +665,10 @@ export default class GameScene extends Phaser.Scene {
     this.effects.setReducedMotion(this.reducedMotion)
     this.powerups = new Powerups(this)
     this.hud.bindPowerups(this.powerups)
+    this.powerups.on('powerup', this.handlePowerupApplied, this)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.powerups.off('powerup', this.handlePowerupApplied, this)
+    })
 
     // Collisions: bullets -> enemies
     this.physics.add.overlap(this.bullets, this.spawner.getGroup(), (_b, _e) => {
@@ -808,7 +857,16 @@ this.lastHitAt = this.time.now
       this.starfield.update(delta)
     }
     this.spawner?.setScrollBase(this.scrollBase)
-    this.waveDirector?.update()
+
+    if (this.timeStopActive) {
+      if (!this.powerups.hasTimeStop || this.time.now >= this.timeStopResumeAt) {
+        this.deactivateTimeStop()
+      }
+    }
+
+    if (!this.timeStopActive) {
+      this.waveDirector?.update()
+    }
 
       if (this.time.now - this.lastBeatAt < 100) { // Visa cirkeln i 100ms efter varje beat
         this.beatIndicator.setAlpha(1);
@@ -830,6 +888,8 @@ this.lastHitAt = this.time.now
       this.fireBullet()
       this.lastShotAt = time
     }
+
+    this.updateMissiles(delta)
 
     const body = this.player.body as Phaser.Physics.Arcade.Body
     const wasdKeys = this.registry.get('wasd') as any
@@ -1050,6 +1110,10 @@ pskin?.setThrust?.(thrustLevel)
 
     this.sound.play('shot', { volume: this.opts.sfxVolume })
 
+    if (this.powerups.hasHomingMissiles) {
+      this.spawnHomingMissile(direction)
+    }
+
     if (this.powerups.hasSplit) {
       const offset = Phaser.Math.DegToRad(12)
       const leftDir = direction.clone().rotate(-offset)
@@ -1166,10 +1230,10 @@ pskin?.setThrust?.(thrustLevel)
   private maybeDropPickup(x: number, y: number) {
     const chance = 0.05
     if (Math.random() > chance) return
-    const types: PowerupType[] = ['shield', 'rapid', 'split', 'slowmo']
-    const type = types[Math.floor(Math.random() * types.length)]
-    const texture = `powerup_${type}_0`
-    const anim = `powerup_pickup_${type}`
+    const type = this.pickPowerupType()
+    const art = this.resolvePowerupVisual(type)
+    const texture = art.texture
+    const anim = art.anim
     const s = this.physics.add.sprite(x, y, texture)
     if (this.anims.exists(anim)) s.play(anim)
     s.setData('ptype', type)
@@ -1260,6 +1324,340 @@ pskin?.setThrust?.(thrustLevel)
     } else {
       this.sound.play('ui_select', { volume: vol })
     }
+  }
+
+  private pickPowerupType(): PowerupType {
+    const fallback: PowerupType[] = [
+      'shield',
+      'rapid',
+      'split',
+      'slowmo',
+      'chain_lightning',
+      'homing_missiles',
+      'time_stop'
+    ]
+    const balance = this.registry.get('balance') as any
+    const rates = balance?.powerups?.dropRates as Partial<Record<PowerupType, number>> | undefined
+    if (!rates) {
+      return fallback[Math.floor(Math.random() * fallback.length)]
+    }
+    const weighted = fallback
+      .map((type) => ({ type, weight: Math.max(0, Number.isFinite(rates[type] ?? 0) ? Number(rates[type]) : 0) }))
+      .filter((entry) => entry.weight > 0)
+    if (!weighted.length) {
+      return fallback[Math.floor(Math.random() * fallback.length)]
+    }
+    const total = weighted.reduce((sum, entry) => sum + entry.weight, 0)
+    const roll = Math.random() * total
+    let accum = 0
+    for (const entry of weighted) {
+      accum += entry.weight
+      if (roll <= accum) return entry.type
+    }
+    return weighted[weighted.length - 1].type
+  }
+
+  private resolvePowerupVisual(type: PowerupType) {
+    const textureKey = `powerup_${type}_0`
+    const fallbackTexture = 'powerup_split_0'
+    const animKey = `powerup_pickup_${type}`
+    const fallbackAnim = 'powerup_pickup_split'
+    const texture = this.textures.exists(textureKey) ? textureKey : fallbackTexture
+    const anim = this.anims.exists(animKey) ? animKey : fallbackAnim
+    return { texture, anim }
+  }
+
+  private applyDamageToEnemy(
+    enemy: Enemy,
+    rawAmount: number,
+    context: {
+      critical?: boolean
+      source: 'bullet' | 'chain' | 'missile'
+      judgement?: BeatJudgement
+      accuracy?: AccuracyLevel
+      registerCombo?: boolean
+    }
+  ): { killed: boolean; remainingHp: number } {
+    if (!enemy.active) return { killed: false, remainingHp: 0 }
+    const amount = Math.max(0, Math.floor(rawAmount))
+    if (amount <= 0) {
+      const currentHp = (enemy.getData('hp') as number) ?? 0
+      return { killed: false, remainingHp: currentHp }
+    }
+
+    const etype = (enemy.getData('etype') as string) || 'swarm'
+    const hp = (enemy.getData('hp') as number) ?? 1
+    const newHp = hp - amount
+    enemy.setData('hp', newHp)
+
+    const maxHp = (enemy.getData('maxHp') as number) ?? Math.max(hp, 1)
+    const isBoss = enemy.getData('isBoss') === true
+    if (isBoss) {
+      this.hud.setBossHealth(Math.max(newHp, 0) / Math.max(maxHp, 1), enemy.getData('etype') as string)
+    }
+
+    this.effects.enemyHitFx(enemy.x, enemy.y, { critical: context.critical })
+    this.effects.hitFlash(enemy)
+    const skin = enemy.getData('skin') as any
+    skin?.onHit?.()
+
+    if (context.registerCombo !== false) {
+      this.registerComboHit(enemy)
+    }
+
+    if (newHp <= 0) {
+      this.sound.play('hit_enemy', { volume: this.opts.sfxVolume })
+      this.scoring.addKill(etype)
+      this.bumpBomb(10)
+      this.maybeDropPickup(enemy.x, enemy.y)
+      this.effects.enemyExplodeFx(enemy.x, enemy.y)
+      const bossFlag = isBoss
+      this.cleanupEnemy(enemy, true)
+      if (bossFlag) this.onBossDown()
+      return { killed: true, remainingHp: 0 }
+    }
+
+    return { killed: false, remainingHp: newHp }
+  }
+
+  private registerComboHit(enemy: Enemy) {
+    const enemyId = enemy.getData('eid') as string | undefined
+    if (this.time.now - this.lastHitAt > this.comboTimeoutMs) {
+      this.comboCount = 0
+      this.lastHitEnemyId = null
+    }
+    if (!enemyId) {
+      this.lastHitAt = this.time.now
+      return
+    }
+    if (this.lastHitEnemyId !== enemyId) {
+      if (this.comboCount > 0) {
+        this.comboCount++
+        this.effects.showComboText(enemy.x, enemy.y, this.comboCount)
+        this.hud.setCombo(this.comboCount)
+        this.announcer.playCombo(this.comboCount)
+      } else {
+        this.comboCount = 1
+      }
+      this.lastHitEnemyId = enemyId
+    }
+    this.lastHitAt = this.time.now
+  }
+
+  private triggerChainLightning(origin: { x: number; y: number; source?: Enemy | null }, baseDamage: number) {
+    if (!this.powerups?.hasChainLightning) return
+    const amount = Math.max(0, Math.round(baseDamage))
+    if (amount <= 0) return
+    const visited = new Set<Enemy>()
+    if (origin.source) visited.add(origin.source)
+    this.chainLightningBounce(origin.x, origin.y, amount, 0, visited)
+  }
+
+  private chainLightningBounce(x: number, y: number, damage: number, bounce: number, visited: Set<Enemy>) {
+    if (!this.powerups?.hasChainLightning) return
+    if (bounce >= 3) return
+    const amount = Math.max(0, Math.round(damage))
+    if (amount <= 0) return
+    const target = this.acquireNearestEnemy(x, y, { within: 420, exclude: visited })
+    if (!target) return
+    const targetX = target.x
+    const targetY = target.y
+    visited.add(target)
+    this.effects.chainLightningArc(x, y, targetX, targetY, { bounceIndex: bounce })
+    this.applyDamageToEnemy(target, amount, {
+      source: 'chain',
+      critical: bounce === 0,
+      registerCombo: false
+    })
+    const nextDamage = Math.max(0, Math.round(amount * 0.6))
+    if (nextDamage <= 0) return
+    this.chainLightningBounce(targetX, targetY, nextDamage, bounce + 1, visited)
+  }
+
+  private acquireNearestEnemy(
+    x: number,
+    y: number,
+    options: { within?: number; exclude?: Set<Enemy> } = {}
+  ): Enemy | null {
+    const group = this.spawner?.getGroup()
+    if (!group) return null
+    const radius = options.within ?? 600
+    const exclude = options.exclude ?? new Set<Enemy>()
+    let best: Enemy | null = null
+    let bestDist = Number.POSITIVE_INFINITY
+    group.children.each((obj: Phaser.GameObjects.GameObject) => {
+      const enemy = obj as Enemy
+      if (!enemy.active) return true
+      if (exclude.has(enemy)) return true
+      const dist = Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y)
+      if (dist <= radius && dist < bestDist) {
+        bestDist = dist
+        best = enemy
+      }
+      return true
+    })
+    return best
+  }
+
+  private spawnHomingMissile(direction: Phaser.Math.Vector2) {
+    if (!this.missiles) return
+    if (this.time.now - this.lastMissileSpawnAt < 140) return
+    const missile = this.missiles.get(this.player.x, this.player.y) as MissileSprite | null
+    if (!missile) return
+
+    this.lastMissileSpawnAt = this.time.now
+    missile.setActive(true).setVisible(true)
+    missile.setTexture('bullet_plasma_0')
+    missile.play('bullet_plasma_idle')
+    missile.setBlendMode(Phaser.BlendModes.ADD)
+    missile.setScale(0.5)
+    missile.setDepth(6)
+
+    const body = missile.body as Phaser.Physics.Arcade.Body
+    body.enable = true
+    body.setAllowGravity(false)
+    body.setSize(12, 52, true)
+    body.onWorldBounds = true
+
+    const dir = direction.lengthSq() > 0 ? direction.clone().normalize() : new Phaser.Math.Vector2(0, -1)
+    body.setVelocity(dir.x * this.homingMissileSpeed, dir.y * this.homingMissileSpeed)
+    missile.setRotation(Math.atan2(body.velocity.y, body.velocity.x) + Math.PI / 2)
+
+    missile.setData('damage', 2)
+    missile.setData('target', null)
+    const trail = this.effects.attachMissileTrail(missile)
+    missile.setData('trailEmitter', trail ?? null)
+
+    this.scheduleMissileTtl(missile, 2400)
+  }
+
+  private resolveMissileTarget(missile: MissileSprite): Enemy | null {
+    const stored = missile.getData('target') as Enemy | null
+    if (stored && stored.active) return stored
+    const target = this.acquireNearestEnemy(missile.x, missile.y)
+    missile.setData('target', target ?? null)
+    return target ?? null
+  }
+
+  private updateMissiles(_delta: number) {
+    if (!this.missiles) return
+    this.missiles.children.each((obj: Phaser.GameObjects.GameObject) => {
+      const missile = obj as MissileSprite
+      if (!missile.active) return true
+      const body = missile.body as Phaser.Physics.Arcade.Body
+      if (!body) return true
+      const target = this.resolveMissileTarget(missile)
+      if (target) {
+        const toTarget = new Phaser.Math.Vector2(target.x - missile.x, target.y - missile.y)
+        const dist = toTarget.length()
+        if (dist > 0) {
+          toTarget.scale(1 / dist)
+          const current = new Phaser.Math.Vector2(body.velocity.x, body.velocity.y)
+          if (current.lengthSq() === 0) current.set(0, -1)
+          else current.normalize()
+          const desired = current.lerp(toTarget, 0.12)
+          if (desired.lengthSq() === 0) desired.set(0, -1)
+          desired.normalize()
+          body.setVelocity(desired.x * this.homingMissileSpeed, desired.y * this.homingMissileSpeed)
+          missile.setRotation(Math.atan2(body.velocity.y, body.velocity.x) + Math.PI / 2)
+        }
+      }
+      return true
+    })
+  }
+
+  private scheduleMissileTtl(missile: MissileSprite, lifetimeMs = 2400) {
+    const prev = missile.getData('ttlEvent') as Phaser.Time.TimerEvent | undefined
+    prev?.remove(false)
+    const ttlEvent = this.time.addEvent({ delay: lifetimeMs, callback: () => this.disableMissile(missile) })
+    missile.setData('ttlEvent', ttlEvent)
+  }
+
+  private disableMissile(missile: MissileSprite) {
+    if (!missile.active) return
+    const ttlEvent = missile.getData('ttlEvent') as Phaser.Time.TimerEvent | undefined
+    ttlEvent?.remove(false)
+    missile.setData('ttlEvent', undefined)
+    const emitter = missile.getData('trailEmitter') as Phaser.GameObjects.Particles.ParticleEmitter | undefined
+    emitter?.destroy()
+    missile.setData('trailEmitter', undefined)
+    missile.anims?.stop?.()
+    missile.disableBody(true, true)
+  }
+
+  private handleMissileWorldBounds(body: Phaser.Physics.Arcade.Body) {
+    const gameObject = body.gameObject as MissileSprite | undefined
+    if (!gameObject) return
+    if (!this.missiles.contains(gameObject)) return
+    this.disableMissile(gameObject)
+  }
+
+  private handlePowerupApplied(event: PowerupEvent) {
+    switch (event.type) {
+      case 'time_stop': {
+        const ms = event.remainingMs > 0 ? event.remainingMs : event.durationMs
+        this.activateTimeStop(ms)
+        break
+      }
+      case 'homing_missiles':
+        this.lastMissileSpawnAt = 0
+        break
+      default:
+        break
+    }
+  }
+
+  private activateTimeStop(durationMs: number) {
+    const resumeAt = this.time.now + Math.max(0, durationMs)
+    this.timeStopResumeAt = Math.max(this.timeStopResumeAt, resumeAt)
+    this.timeStopActive = true
+    this.freezeEnemyMotion(true)
+  }
+
+  private deactivateTimeStop() {
+    if (!this.timeStopActive) return
+    this.timeStopActive = false
+    this.timeStopResumeAt = 0
+    this.freezeEnemyMotion(false)
+  }
+
+  private freezeEnemyMotion(freeze: boolean) {
+    const group = this.spawner?.getGroup()
+    if (!group) return
+    group.children.each((obj: Phaser.GameObjects.GameObject) => {
+      const enemy = obj as Enemy
+      if (!enemy.active) return true
+      const body = enemy.body as Phaser.Physics.Arcade.Body
+      if (!body) return true
+      if (freeze) {
+        if (!enemy.getData('timeStopStored')) {
+          enemy.setData('timeStopStored', true)
+          enemy.setData('timeStopVelX', body.velocity.x)
+          enemy.setData('timeStopVelY', body.velocity.y)
+        }
+        body.setVelocity(0, 0)
+        body.moves = false
+        const tween = enemy.getData('laneHopTween') as Phaser.Tweens.Tween | null
+        if (tween && tween.isPlaying()) {
+          tween.pause()
+          enemy.setData('timeStopPausedTween', true)
+        }
+      } else {
+        if (enemy.getData('timeStopStored')) {
+          const vx = enemy.getData('timeStopVelX') as number | undefined
+          const vy = enemy.getData('timeStopVelY') as number | undefined
+          body.setVelocity(vx ?? body.velocity.x, vy ?? body.velocity.y)
+          enemy.setData('timeStopStored', false)
+        }
+        body.moves = true
+        const tween = enemy.getData('laneHopTween') as Phaser.Tweens.Tween | null
+        if (tween && enemy.getData('timeStopPausedTween')) {
+          tween.resume()
+          enemy.setData('timeStopPausedTween', false)
+        }
+      }
+      return true
+    })
   }
 
   private registerTouchTap(time: number) {
@@ -1738,6 +2136,10 @@ pskin?.setThrust?.(thrustLevel)
 
       const pattern = enemy.getData('pattern') as PatternData | null
       const body = enemy.body as Phaser.Physics.Arcade.Body
+      if (this.timeStopActive) {
+        body.setVelocity(0, 0)
+        return true
+      }
       if (pattern) {
         switch (pattern.kind) {
           case 'lane': {

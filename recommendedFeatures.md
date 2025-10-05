@@ -19,6 +19,11 @@ This document outlines recommended features for Beat Blaster 2.
 
 ## Level Editor
 
+- **Beat Navigation:** UI controls for cycling through beats (previous/next).
+- **Beat Filtering:** Filter beats by type (e.g., 'normal', 'long', 'special') and properties (e.g., 'color', 'duration').
+- **Lane Management:** UI controls for creating, deleting, and reordering lanes.
+- **Enemy Pattern Definition System:** A visual editor for creating and editing enemy patterns, including sequence, timing, and lane assignment.
+
 - **Improved UI:** The level editor UI could be improved to make it more user-friendly.
 - **More Control:** The level editor could be improved to give users more control over the placement and behavior of enemies.
 - **Sharing:** The level editor could be improved to allow users to share their creations with other players.

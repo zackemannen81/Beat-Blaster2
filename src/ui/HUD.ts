@@ -33,12 +33,23 @@ export default class HUD {
   private bossBarFill!: Phaser.GameObjects.Rectangle
   private powerups?: Powerups
   private powerupSlots = new Map<PowerupType, PowerupSlot>()
-  private powerupOrder: PowerupType[] = ['shield', 'rapid', 'split', 'slowmo']
+  private powerupOrder: PowerupType[] = [
+    'shield',
+    'rapid',
+    'split',
+    'slowmo',
+    'chain_lightning',
+    'homing_missiles',
+    'time_stop'
+  ]
   private powerupPalette: Record<PowerupType, number> = {
     shield: 0x74d0ff,
     rapid: 0xff6b6b,
     split: 0xba68ff,
-    slowmo: 0x78ffbc
+    slowmo: 0x78ffbc,
+    chain_lightning: 0x5ce6ff,
+    homing_missiles: 0xffb347,
+    time_stop: 0x9c6bff
   }
   private reducedMotion = false
   private missResetTimer?: Phaser.Time.TimerEvent
