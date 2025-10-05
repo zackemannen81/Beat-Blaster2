@@ -608,7 +608,8 @@ export default class GameScene extends Phaser.Scene {
         stage: this.currentStageConfig,
         waveDirector: this.waveDirector,
         getLaneManager: () => this.lanes,
-        requestLaneCount: (count, effect) => this.applyLanePatternCount(count, effect)
+        requestLaneCount: (count, effect) => this.applyLanePatternCount(count, effect),
+        registerDescriptor: (descriptor) => this.waveDescriptorIndex.set(descriptor.id, descriptor)
       })
 
       const customPatternName = this.registry.get('selectedCustomPattern');

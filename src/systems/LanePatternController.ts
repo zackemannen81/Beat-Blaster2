@@ -18,6 +18,7 @@ export interface LanePatternControllerOptions {
   waveDirector: WaveDirector;
   getLaneManager: () => LaneManager | undefined;
   requestLaneCount: (count: 3 | 5 | 7, effect?: LaneEffect) => void;
+  registerDescriptor?: (descriptor: WaveDescriptor) => void;
 }
 
 export type LaneRef =
@@ -131,6 +132,7 @@ export default class LanePatternController {
   private waveDirector: WaveDirector;
   private getLaneManager: () => LaneManager | undefined;
   private requestLaneCount: (count: 3 | 5 | 7, effect?: LaneEffect) => void;
+  private registerDescriptor?: (descriptor: WaveDescriptor) => void;
   private beatIndex = 0;
   private cycleIndex = 0;
   private currentLaneCount: 3 | 5 | 7 = 3;
@@ -151,6 +153,7 @@ export default class LanePatternController {
     this.waveDirector = options.waveDirector;
     this.getLaneManager = options.getLaneManager;
     this.requestLaneCount = options.requestLaneCount;
+    this.registerDescriptor = options.registerDescriptor;
     this.difficulty = options.difficulty;
     this.stage = options.stage;
 
@@ -309,6 +312,7 @@ export default class LanePatternController {
         formationParams: { laneIndex },
         category: spawn.category ?? 'standard',
       };
+      this.registerDescriptor?.(descriptor);
       this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false, force: true });
     });
   }
@@ -325,6 +329,7 @@ export default class LanePatternController {
       formationParams: { laneA, laneB, hopEveryBeats: spawn.hopEvery ?? 1 },
       category: spawn.category ?? 'standard',
     };
+    this.registerDescriptor?.(descriptor);
     this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false, force: true });
   }
 
@@ -342,6 +347,7 @@ export default class LanePatternController {
       },
       category: spawn.category ?? 'standard',
     };
+    this.registerDescriptor?.(descriptor);
     this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false, force: true });
   }
 
@@ -360,6 +366,7 @@ export default class LanePatternController {
       },
       category: spawn.category ?? 'standard',
     };
+    this.registerDescriptor?.(descriptor);
     this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false, force: true });
   }
 
@@ -379,6 +386,7 @@ export default class LanePatternController {
       },
       category: spawn.category ?? 'heavy',
     };
+    this.registerDescriptor?.(descriptor);
     this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false, force: true });
   }
 
@@ -397,6 +405,7 @@ export default class LanePatternController {
       },
       category: spawn.category ?? 'standard',
     };
+    this.registerDescriptor?.(descriptor);
     this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false, force: true });
   }
 
@@ -414,6 +423,7 @@ export default class LanePatternController {
       },
       category: spawn.category ?? 'heavy',
     };
+    this.registerDescriptor?.(descriptor);
     this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false, force: true });
   }
 
@@ -432,6 +442,7 @@ export default class LanePatternController {
       },
       category: spawn.category ?? 'heavy',
     };
+    this.registerDescriptor?.(descriptor);
     this.waveDirector.scheduleDescriptor(descriptor, { respectAvailability: false });
   }
 

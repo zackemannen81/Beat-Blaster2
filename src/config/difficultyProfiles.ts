@@ -64,7 +64,7 @@ const wipProfile: DifficultyProfile = {
   id: 'wip',
   label: 'wip',
   description: 'Gentle pacing with generous telegraphs and capped heavy waves for onboarding.',
-  baseScrollSpeed: 44,
+  baseScrollSpeed: 64,
   baseSpawnRate: 0.04,
   baseEnemyHpMultiplier: 0.115,
   baseBossHpMultiplier: 0.285,
@@ -72,14 +72,14 @@ const wipProfile: DifficultyProfile = {
   waveRepeatCooldownMs: 22000,
   fallbackCooldownMs: 77000,
   wavePlaylistId: 'wip',
-  laneCount: 4,
+  laneCount: 3,
   missPenalty: 0,
   bossMissPenalty: 80,
   categoryCooldowns: {
     light: 0,
     standard: 900,
-    heavy: 3600,
-    boss: 5200
+    heavy: 23600,
+    boss: 100800
   },
   heavyControls: {
     cooldownMs: 5200,
@@ -103,7 +103,7 @@ const normalProfile: DifficultyProfile = {
   id: 'normal',
   label: 'Normal',
   description: 'Calibrated pacing after onboarding with denser waves and moderate penalties.',
-  baseScrollSpeed: 80,
+  baseScrollSpeed: 96,
   baseSpawnRate: 0.14,
   baseEnemyHpMultiplier: 0.5,
   baseBossHpMultiplier: 0.66,
@@ -117,8 +117,8 @@ const normalProfile: DifficultyProfile = {
   categoryCooldowns: {
     light: 0,
     standard: 850,
-    heavy: 3900,
-    boss: 5500
+    heavy: 23900,
+    boss: 12000
   },
   heavyControls: {
     cooldownMs: 5900,
@@ -133,7 +133,7 @@ const hardProfile: DifficultyProfile = {
   id: 'hard',
   label: 'Hard',
   description: 'Accelerated scroll, dense formations, and aggressive heavy cadence for veterans.',
-  baseScrollSpeed: 96,
+  baseScrollSpeed: 128,
   baseSpawnRate: 0.23,
   baseEnemyHpMultiplier: 0.725,
   baseBossHpMultiplier: 0.885,
@@ -141,14 +141,14 @@ const hardProfile: DifficultyProfile = {
   waveRepeatCooldownMs: 13500,
   fallbackCooldownMs: 58000,
   wavePlaylistId: 'hard',
-  laneCount: 6,
+  laneCount: 7,
   missPenalty: 25,
   bossMissPenalty: 85,
   categoryCooldowns: {
     light: 0,
     standard: 660,
-    heavy: 2900,
-    boss: 4700
+    heavy: 8900,
+    boss: 40800
   },
   heavyControls: {
     cooldownMs: 5500,
