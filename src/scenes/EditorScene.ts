@@ -4,6 +4,7 @@ import { HistoryService } from '../editor/HistoryService';
 import { SpawnAction } from '../systems/LanePatternController';
 import { TimelineUI } from '../editor/ui/TimelineUI';
 import { ObjectPaletteUI } from '../editor/ui/ObjectPaletteUI';
+import { PatternEditorUI } from '../editor/ui/PatternEditorUI';
 import { EnemyType } from '../config/enemyStyles';
 
 const AVAILABLE_ENEMY_TYPES: EnemyType[] = [
@@ -17,6 +18,7 @@ export default class EditorScene extends Phaser.Scene {
   private debugGraphics!: Phaser.GameObjects.Graphics;
   private timeline!: TimelineUI;
   private palette!: ObjectPaletteUI;
+  private patternEditor!: PatternEditorUI;
 
   constructor() {
     super('EditorScene');
@@ -59,6 +61,30 @@ export default class EditorScene extends Phaser.Scene {
       this.renderState();
     });
 
+    const addLaneButton = this.add.text(50, 300, 'Add Lane', { color: '#0f0', backgroundColor: '#555' }).setPadding(5).setInteractive();
+    addLaneButton.on('pointerdown', () => {
+      this.editorState.addLane();
+      this.renderState();
+    });
+
+    const removeLaneButton = this.add.text(150, 300, 'Remove Lane', { color: '#f00', backgroundColor: '#555' }).setPadding(5).setInteractive();
+    removeLaneButton.on('pointerdown', () => {
+      this.editorState.removeLane();
+      this.renderState();
+    });
+
+    const moveLaneLeftButton = this.add.text(50, 340, '<', { color: '#ff0', backgroundColor: '#555' }).setPadding(5).setInteractive();
+    moveLaneLeftButton.on('pointerdown', () => {
+      this.editorState.moveLane(-1);
+      this.renderState();
+    });
+
+    const moveLaneRightButton = this.add.text(100, 340, '>', { color: '#ff0', backgroundColor: '#555' }).setPadding(5).setInteractive();
+    moveLaneRightButton.on('pointerdown', () => {
+      this.editorState.moveLane(1);
+      this.renderState();
+    });
+
     const saveButton = this.add.text(700, 50, 'Save', { color: '#0f0', backgroundColor: '#555' }).setPadding(5).setInteractive();
     saveButton.on('pointerdown', () => this.handleSave());
 
@@ -68,6 +94,7 @@ export default class EditorScene extends Phaser.Scene {
     this.debugGraphics = this.add.graphics();
     this.timeline = new TimelineUI(this, 16);
     this.palette = new ObjectPaletteUI(this, AVAILABLE_ENEMY_TYPES);
+    this.patternEditor = new PatternEditorUI(this, 400, 250);
 
     this.input.keyboard!.on('keydown-ESC', () => {
       this.scene.start('GameScene');
@@ -126,6 +153,12 @@ export default class EditorScene extends Phaser.Scene {
     this.timeline.setActiveBeat(beatIndex);
 
     this.debugGraphics.clear();
+    const lanes = this.editorState.getLanes();
+    lanes.forEach((lane, i) => {
+      this.debugGraphics.fillStyle(0xcccccc, 0.5);
+      this.debugGraphics.fillRect(200 + i * 100, 250, 80, 200);
+    });
+
     const currentStep = this.editorState.getCurrentBeatStep();
 
     if (currentStep && currentStep.spawns) {
