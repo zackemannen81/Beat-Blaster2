@@ -1,0 +1,139 @@
+import Phaser from 'phaser';
+import { EditorState } from '../editor/EditorState';
+import { HistoryService } from '../editor/HistoryService';
+import { SpawnAction } from '../systems/LanePatternController';
+import { TimelineUI } from '../editor/ui/TimelineUI';
+import { ObjectPaletteUI } from '../editor/ui/ObjectPaletteUI';
+import { EnemyType } from '../config/enemyStyles';
+
+const AVAILABLE_ENEMY_TYPES: EnemyType[] = [
+    'swarm', 'brute', 'weaver', 'dasher', 'exploder', 'mirrorer', 'teleporter', 'flooder', 'formation'
+];
+
+export default class EditorScene extends Phaser.Scene {
+  private historyService!: HistoryService;
+  private editorState!: EditorState;
+  private beatIndexText!: Phaser.GameObjects.Text;
+  private debugGraphics!: Phaser.GameObjects.Graphics;
+  private timeline!: TimelineUI;
+  private palette!: ObjectPaletteUI;
+
+  constructor() {
+    super('EditorScene');
+  }
+
+  create() {
+    this.historyService = new HistoryService();
+    this.editorState = new EditorState(this.historyService);
+
+    this.add.text(50, 50, 'Beat Blaster Editor', { color: '#ffffff', fontSize: '32px' });
+    this.beatIndexText = this.add.text(50, 100, `Beat: 0`, { color: '#cccccc', fontSize: '24px' });
+    this.add.text(50, 150, 'Left/Right to navigate beats', { color: '#aaaaaa' });
+    this.add.text(50, 190, 'Cmd/Ctrl+Z to Undo', { color: '#aaaaaa' });
+    this.add.text(50, 210, 'Press ESC to return', { color: '#aaaaaa' });
+
+    const saveButton = this.add.text(700, 50, 'Save', { color: '#0f0', backgroundColor: '#555' }).setPadding(5).setInteractive();
+    saveButton.on('pointerdown', () => this.handleSave());
+
+    const loadButton = this.add.text(760, 50, 'Load', { color: '#ff0', backgroundColor: '#555' }).setPadding(5).setInteractive();
+    loadButton.on('pointerdown', () => this.handleLoad());
+
+    this.debugGraphics = this.add.graphics();
+    this.timeline = new TimelineUI(this, 16);
+    this.palette = new ObjectPaletteUI(this, AVAILABLE_ENEMY_TYPES);
+
+    this.input.keyboard!.on('keydown-ESC', () => {
+      this.scene.start('GameScene');
+    });
+
+    this.input.keyboard!.on('keydown-LEFT', () => {
+      const currentIndex = this.editorState.getCurrentBeatIndex();
+      this.editorState.setActiveBeat(currentIndex - 1);
+      this.renderState();
+    });
+
+    this.input.keyboard!.on('keydown-RIGHT', () => {
+      const currentIndex = this.editorState.getCurrentBeatIndex();
+      this.editorState.setActiveBeat(currentIndex + 1);
+      this.renderState();
+    });
+
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        // Ignore clicks on the UI areas
+        if (pointer.x > 780 || pointer.y > 480) return;
+
+        const activeTool = this.palette.getActiveTool();
+        if (activeTool) {
+            const newSpawn: SpawnAction = {
+                kind: 'lane', // Default to lane for now
+                enemyType: activeTool,
+                speed: 1,
+                lanes: 'center', // Default to center for now
+                count: 1
+            };
+            this.editorState.addSpawn(newSpawn);
+            this.renderState();
+        }
+    });
+
+    // Undo/Redo
+    this.input.keyboard!.on('keydown', (event: KeyboardEvent) => {
+        if (event.metaKey || event.ctrlKey) {
+            if (event.key === 'z') {
+                if (event.shiftKey) {
+                    this.historyService.redo();
+                } else {
+                    this.historyService.undo();
+                }
+                this.renderState();
+            }
+        }
+    });
+
+    this.renderState();
+  }
+
+  renderState() {
+    const beatIndex = this.editorState.getCurrentBeatIndex();
+    this.beatIndexText.setText(`Beat: ${beatIndex + 1} / 16`);
+    this.timeline.setActiveBeat(beatIndex);
+
+    this.debugGraphics.clear();
+    const currentStep = this.editorState.getCurrentBeatStep();
+
+    if (currentStep && currentStep.spawns) {
+        currentStep.spawns.forEach((spawn, i) => {
+            this.debugGraphics.fillStyle(0x00ff00, 0.5);
+            this.debugGraphics.fillRect(200 + i * 50, 300, 40, 40);
+        });
+    }
+  }
+
+  private handleSave() {
+    const name = prompt('Enter pattern name:');
+    if (name) {
+      if (this.editorState.save(name)) {
+        alert(`Pattern '${name}' saved.`);
+      } else {
+        alert('Failed to save pattern.');
+      }
+    }
+  }
+
+  private handleLoad() {
+    const patterns = this.editorState.listPatterns();
+    if (patterns.length === 0) {
+      alert('No saved patterns found.');
+      return;
+    }
+    const name = prompt(`Enter pattern to load:\n\n${patterns.join('\n')}`);
+    if (name) {
+      if (this.editorState.load(name)) {
+        this.renderState();
+        alert(`Pattern '${name}' loaded.`);
+      } else {
+        alert(`Failed to load pattern '${name}'.`);
+      }
+    }
+  }
+}
