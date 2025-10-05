@@ -13,7 +13,8 @@ A rhythm-based game with a level editor.
 
 1. Clone the repository: `git clone https://github.com/zackemannen81/Beat-Blaster2.git`
 2. Install dependencies: `npm install`
-3. Run the development server: `npm run dev`
+3. Configure Git hooks: `git config core.hooksPath .githooks`
+4. Run the development server: `npm run dev`
 
 ## Usage
 

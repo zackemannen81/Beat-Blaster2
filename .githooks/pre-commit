@@ -1,0 +1,16 @@
+#!/bin/sh
+
+BRANCH_NAME=$(git symbolic-ref --short HEAD)
+
+if [ "$BRANCH_NAME" = "main" ]; then
+  echo "You cannot commit directly to the main branch. Please create a feature branch." >&2
+  exit 1
+fi
+
+COMMIT_MSG_FILE=$1
+COMMIT_MSG=$(cat $COMMIT_MSG_FILE)
+
+if ! echo "$COMMIT_MSG" | grep -q "Task ID:"; then
+  echo "Commit message must include a Task ID." >&2
+  exit 1
+fi
