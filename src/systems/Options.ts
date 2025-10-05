@@ -16,6 +16,7 @@ export type Options = {
   verticalSafetyBand: boolean
   allowFallbackWaves: boolean
   unlockMouseAim: boolean
+  mouseNavigation: boolean
 }
 
 const KEY = 'bb_options_v1'
@@ -35,7 +36,8 @@ export const DEFAULT_OPTIONS: Options = {
   crosshairMode: 'fixed',
   verticalSafetyBand: false,
   allowFallbackWaves: false,
-  unlockMouseAim: false
+  unlockMouseAim: false,
+  mouseNavigation: true
 }
 
 const VALID_FIRE_MODES: Options['fireMode'][] = ['click', 'hold_raw', 'hold_quantized']
@@ -96,6 +98,7 @@ function withDefaults(raw: Partial<Options> | null | undefined): Options {
   merged.verticalSafetyBand = Boolean(raw?.verticalSafetyBand)
   merged.allowFallbackWaves = raw?.allowFallbackWaves !== false
   merged.unlockMouseAim = Boolean(raw?.unlockMouseAim)
+  merged.mouseNavigation = Boolean(raw?.mouseNavigation)
 
   return merged
 }
