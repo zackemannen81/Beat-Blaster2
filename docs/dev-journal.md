@@ -73,10 +73,10 @@ This journal tracks the development progress of Beat Blaster 2.
 ### Task ID: [GAMEPLAY-005]
 
 - **Start Time:** [2025-10-06 16:45:00]
-- **End Time:** [In Progress]
-- **Status:** [In Progress]
+- **End Time:** [2025-10-06 17:20:00]
+- **Status:** [Completed]
 - **Notes/Blockers:** 
-  - Planning power-up label styling that stays readable without cluttering gameplay.
+  - Implemented anchored pickup labels respecting high-contrast/reduced-motion preferences; no blockers encountered.
 - **Associated Files:**
   - `tasks/gameplay/enhance_powerup_visibility.md`
   - `src/scenes/GameScene.ts`
