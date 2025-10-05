@@ -1,6 +1,13 @@
 import Phaser from 'phaser'
 
-export type PowerupType = 'shield' | 'rapid' | 'split' | 'slowmo'
+export type PowerupType =
+  | 'shield'
+  | 'rapid'
+  | 'split'
+  | 'slowmo'
+  | 'chain_lightning'
+  | 'homing_missiles'
+  | 'time_stop'
 
 export interface PowerupEvent {
   type: PowerupType
@@ -15,11 +22,17 @@ export default class Powerups extends Phaser.Events.EventEmitter {
   private splitUntil = 0
   private shieldUntil = 0
   private slowmoUntil = 0
+  private chainLightningUntil = 0
+  private homingMissilesUntil = 0
+  private timeStopUntil = 0
   private durationMs: Record<PowerupType, number> = {
     shield: 0,
     rapid: 0,
     split: 0,
     slowmo: 0,
+    chain_lightning: 0,
+    homing_missiles: 0,
+    time_stop: 0,
   }
 
   constructor(scene: Phaser.Scene) {
@@ -31,6 +44,9 @@ export default class Powerups extends Phaser.Events.EventEmitter {
   get hasSplit() { return this.scene.time.now < this.splitUntil }
   get hasShield() { return this.scene.time.now < this.shieldUntil }
   get hasSlowmo() { return this.scene.time.now < this.slowmoUntil }
+  get hasChainLightning() { return this.scene.time.now < this.chainLightningUntil }
+  get hasHomingMissiles() { return this.scene.time.now < this.homingMissilesUntil }
+  get hasTimeStop() { return this.scene.time.now < this.timeStopUntil }
 
   apply(type: PowerupType, durationSec: number) {
     const now = this.scene.time.now
@@ -56,13 +72,33 @@ export default class Powerups extends Phaser.Events.EventEmitter {
         })
         break
       }
+      case 'chain_lightning':
+        this.chainLightningUntil = Math.max(this.chainLightningUntil, end)
+        break
+      case 'homing_missiles':
+        this.homingMissilesUntil = Math.max(this.homingMissilesUntil, end)
+        break
+      case 'time_stop':
+        this.timeStopUntil = Math.max(this.timeStopUntil, end)
+        break
     }
     this.emit('powerup', this.buildEvent(type))
   }
 
   getRemainingMs(type: PowerupType) {
     const now = this.scene.time.now
-    const until = type === 'rapid' ? this.rapidUntil : type === 'split' ? this.splitUntil : type === 'shield' ? this.shieldUntil : this.slowmoUntil
+    const until = (() => {
+      switch (type) {
+        case 'rapid': return this.rapidUntil
+        case 'split': return this.splitUntil
+        case 'shield': return this.shieldUntil
+        case 'slowmo': return this.slowmoUntil
+        case 'chain_lightning': return this.chainLightningUntil
+        case 'homing_missiles': return this.homingMissilesUntil
+        case 'time_stop': return this.timeStopUntil
+        default: return 0
+      }
+    })()
     return Math.max(0, until - now)
   }
 
@@ -77,7 +113,16 @@ export default class Powerups extends Phaser.Events.EventEmitter {
   }
 
   getActiveTypes(): PowerupType[] {
-    return (['shield', 'rapid', 'split', 'slowmo'] as PowerupType[]).filter((t) => this.getRemainingMs(t) > 0)
+    const types: PowerupType[] = [
+      'shield',
+      'rapid',
+      'split',
+      'slowmo',
+      'chain_lightning',
+      'homing_missiles',
+      'time_stop'
+    ]
+    return types.filter((t) => this.getRemainingMs(t) > 0)
   }
 
   private buildEvent(type: PowerupType): PowerupEvent {

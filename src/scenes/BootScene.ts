@@ -230,6 +230,7 @@ export default class BootScene extends Phaser.Scene {
   */
     //this.makeSynthParticles();
     this.makeThrusterPinkCanvas('thruster_pink', 64, 64)
+    this.ensureProceduralPowerups()
     this.ensurePlasmaAnimations()
     const tracks = this.cache.json.get('tracks') as any[]
     this.registry.set('tracks', tracks)
@@ -325,7 +326,7 @@ export default class BootScene extends Phaser.Scene {
       })
     }
 
-    const ensurePowerupAnim = (type: 'shield' | 'rapid' | 'split' | 'slowmo') => {
+    const ensurePowerupAnim = (type: 'shield' | 'rapid' | 'split' | 'slowmo' | 'chain_lightning' | 'homing_missiles' | 'time_stop') => {
       const key = `powerup_pickup_${type}`
       if (this.anims.exists(key)) return
       const frames = makeFrames(`powerup_${type}`, 8)
@@ -336,5 +337,145 @@ export default class BootScene extends Phaser.Scene {
     ensurePowerupAnim('rapid')
     ensurePowerupAnim('split')
     ensurePowerupAnim('slowmo')
+    ensurePowerupAnim('chain_lightning')
+    ensurePowerupAnim('homing_missiles')
+    ensurePowerupAnim('time_stop')
+  }
+
+  private ensureProceduralPowerups() {
+    const specs = [
+      { type: 'chain_lightning', base: 0x5ce6ff, accent: 0xffffff, ring: 0x2aa3ff },
+      { type: 'homing_missiles', base: 0xffb347, accent: 0xfff1c6, ring: 0xff8247 },
+      { type: 'time_stop', base: 0x9c6bff, accent: 0xf2e7ff, ring: 0x6f3dff }
+    ] as const
+    specs.forEach((spec) => {
+      this.generatePowerupFrames(spec.type, spec.base, spec.accent, spec.ring)
+      this.ensurePowerupBadge(spec.type, spec.base)
+    })
+  }
+
+  private generatePowerupFrames(type: string, baseColor: number, accentColor: number, ringColor: number) {
+    const size = 64
+    const cx = size / 2
+    const cy = size / 2
+    if (this.textures.exists(`powerup_${type}_0`)) return
+
+    const frameCount = 8
+    for (let i = 0; i < frameCount; i++) {
+      const graphics = this.add.graphics({ x: 0, y: 0 })
+      graphics.setVisible(false)
+      graphics.clear()
+
+      const rotation = (Math.PI * 2 * i) / frameCount
+
+      graphics.fillStyle(baseColor, 0.7)
+      graphics.fillCircle(cx, cy, 20)
+
+      graphics.lineStyle(3, ringColor, 0.6)
+      graphics.strokeCircle(cx, cy, 22)
+
+      if (type === 'chain_lightning') {
+        const segments = 6
+        graphics.lineStyle(4, accentColor, 0.95)
+        graphics.beginPath()
+        graphics.moveTo(cx, cy - 18)
+        for (let s = 1; s <= segments; s++) {
+          const t = s / segments
+          const offset = (s % 2 === 0 ? 1 : -1) * 10
+          const px = cx + Math.sin(rotation + t * Math.PI * 1.5) * offset
+          const py = Phaser.Math.Linear(cy - 18, cy + 18, t)
+          graphics.lineTo(px, py)
+        }
+        graphics.strokePath()
+      } else if (type === 'homing_missiles') {
+        graphics.lineStyle(4, accentColor, 0.95)
+        for (let n = -1; n <= 1; n++) {
+          const angle = rotation + n * 0.28
+          const tipX = cx + Math.cos(angle) * 20
+          const tipY = cy + Math.sin(angle) * 20
+          const tailX = cx + Math.cos(angle + Math.PI) * 8
+          const tailY = cy + Math.sin(angle + Math.PI) * 8
+          graphics.beginPath()
+          graphics.moveTo(tailX, tailY)
+          graphics.lineTo(tipX, tipY)
+          graphics.lineTo(
+            tipX + Math.cos(angle - Math.PI / 2) * 6,
+            tipY + Math.sin(angle - Math.PI / 2) * 6
+          )
+          graphics.lineTo(
+            tipX + Math.cos(angle + Math.PI / 2) * 6,
+            tipY + Math.sin(angle + Math.PI / 2) * 6
+          )
+          graphics.lineTo(tailX, tailY)
+          graphics.strokePath()
+        }
+      } else if (type === 'time_stop') {
+        graphics.lineStyle(3, accentColor, 0.95)
+        graphics.strokeCircle(cx, cy, 16)
+        const minuteAngle = rotation
+        const hourAngle = rotation * 0.5
+        graphics.beginPath()
+        graphics.moveTo(cx, cy)
+        graphics.lineTo(cx + Math.cos(minuteAngle) * 16, cy + Math.sin(minuteAngle) * 16)
+        graphics.strokePath()
+        graphics.beginPath()
+        graphics.moveTo(cx, cy)
+        graphics.lineTo(cx + Math.cos(hourAngle) * 11, cy + Math.sin(hourAngle) * 11)
+        graphics.strokePath()
+        graphics.fillStyle(accentColor, 0.9)
+        graphics.fillCircle(cx, cy, 3)
+      }
+
+      graphics.generateTexture(`powerup_${type}_${i}`, size, size)
+      graphics.destroy()
+    }
+  }
+
+  private ensurePowerupBadge(type: string, color: number) {
+    const key = `powerup_badge_${type}`
+    if (this.textures.exists(key)) return
+    const size = 52
+    const graphics = this.add.graphics({ x: 0, y: 0 })
+    graphics.setVisible(false)
+    graphics.clear()
+    graphics.fillStyle(color, 0.92)
+    graphics.fillRoundedRect(0, 0, size, size, 14)
+    graphics.lineStyle(2, 0xffffff, 0.85)
+    graphics.strokeRoundedRect(0, 0, size, size, 14)
+
+    graphics.lineStyle(4, 0xffffff, 0.95)
+    const cx = size / 2
+    const cy = size / 2
+    if (type === 'chain_lightning') {
+      graphics.beginPath()
+      graphics.moveTo(cx - 8, cy - 14)
+      graphics.lineTo(cx, cy - 2)
+      graphics.lineTo(cx - 6, cy + 4)
+      graphics.lineTo(cx + 6, cy + 14)
+      graphics.strokePath()
+    } else if (type === 'homing_missiles') {
+      graphics.beginPath()
+      graphics.moveTo(cx - 10, cy + 10)
+      graphics.lineTo(cx + 10, cy)
+      graphics.lineTo(cx - 4, cy - 10)
+      graphics.lineTo(cx - 10, cy + 10)
+      graphics.strokePath()
+    } else if (type === 'time_stop') {
+      graphics.strokeCircle(cx, cy, 14)
+      graphics.lineStyle(3, 0xffffff, 0.9)
+      graphics.beginPath()
+      graphics.moveTo(cx, cy)
+      graphics.lineTo(cx, cy - 10)
+      graphics.strokePath()
+      graphics.beginPath()
+      graphics.moveTo(cx, cy)
+      graphics.lineTo(cx + 8, cy + 4)
+      graphics.strokePath()
+      graphics.fillStyle(0xffffff, 0.95)
+      graphics.fillCircle(cx, cy, 2)
+    }
+
+    graphics.generateTexture(key, size, size)
+    graphics.destroy()
   }
 }

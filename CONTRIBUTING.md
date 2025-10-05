@@ -29,6 +29,35 @@ To maintain consistency throughout the codebase, we follow a specific coding sty
 npm run lint
 ```
 
+## Worktree Workflow
+
+To avoid stepping on each other's tasks, we use two Git worktrees per contributor:
+
+- **Implementation worktree:** your feature branch lives here. All gameplay/editor changes are developed in this checkout.
+- **Coordination worktree:** a separate checkout that stays on `main`. Use it to update `docs/dev-journal.md`, task status notes, or other coordination artifacts, then commit and push immediately so the whole team sees progress.
+
+### Setup
+
+```bash
+git worktree add ../bb2-main main   # creates ../bb2-main pointing at main
+```
+
+### Daily flow
+
+1. **Log progress first:** in the `main` worktree (`../bb2-main`), update the journal/task files and commit + push. Example:
+   ```bash
+   cd ../bb2-main
+   git pull --ff-only
+   # edit docs/dev-journal.md, tasks/... as needed
+   git add docs/dev-journal.md tasks/
+   git commit -m "chore: log GAMEPLAY-001 progress"
+   git push origin main
+   ```
+2. **Implement features:** switch back to your feature worktree, create or update your feature branch, and continue development with confidence no one will miss your status updates.
+3. **Sync often:** run `git fetch` in both worktrees so `main` stays current before logging new work.
+
+This workflow keeps status updates visible on `main` while isolating feature development, reducing cross-task interference.
+
 ## Questions and Support
 
 If you have any questions or need help with the contribution process, feel free to reach out to us by [opening an issue](https://github.com/zackemannen81/Beat-Blaster2/issues).

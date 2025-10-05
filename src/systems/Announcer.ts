@@ -94,7 +94,10 @@ export default class Announcer {
     shield: 'shield',
     rapid: 'rapid_fire',
     split: 'split_shot',
-    slowmo: 'slowmo'
+    slowmo: 'slowmo',
+    chain_lightning: 'powerup',
+    homing_missiles: 'powerup',
+    time_stop: 'powerup'
   }
 
   constructor(scene: Phaser.Scene, getVolume: () => number, options: AnnouncerOptions = {}) {

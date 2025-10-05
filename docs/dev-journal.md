@@ -29,9 +29,26 @@ This journal tracks the development progress of Beat Blaster 2.
   - `src/editor/EditorState.ts`
   - `src/editor/ui/PatternEditorUI.ts`
   - `src/editor/types.ts`
-- **Commit Hash:** `b1de02b`
+- **Commit Hash:** `f02ccef`
 
 ---
 
+### Task ID: [GAMEPLAY-001]
 
+- **Start Time:** [2025-10-05 05:07:11]
+- **End Time:** [2025-10-05 05:48:22]
+- **Status:** [Completed]
+- **Notes/Blockers:** 
+  - Implemented Chain Lightning bounce damage, Homing Missile tracking, Time Stop enemy freeze plus HUD/assets updates.
+  - `npm run build` currently fails due to existing syntax errors in `src/editor/ui/PatternEditorUI.ts`.
+- **Associated Files:**
+  - `src/scenes/GameScene.ts`
+  - `src/systems/Powerups.ts`
+  - `src/ui/HUD.ts`
+  - `src/systems/Effects.ts`
+  - `src/config/balance.json`
+  - `tasks/gameplay/implement_new_power-ups.md`
+- **Commit Hash:** `[pending]`
+
+---
 

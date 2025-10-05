@@ -439,7 +439,10 @@ export default class Effects {
       shield: 0x74d0ff,
       rapid: 0xff6b6b,
       split: 0xba68ff,
-      slowmo: 0x78ffbc
+      slowmo: 0x78ffbc,
+      chain_lightning: 0x5ce6ff,
+      homing_missiles: 0xffb347,
+      time_stop: 0x9c6bff
     }
     const color = palette[type]
     const label = type.toUpperCase()
@@ -461,5 +464,55 @@ export default class Effects {
       ease: 'Cubic.easeOut',
       onComplete: () => text.destroy()
     })
+  }
+
+  chainLightningArc(fromX: number, fromY: number, toX: number, toY: number, opts: { bounceIndex?: number } = {}) {
+    if (this.reducedMotion) return
+    const graphics = this.scene.add.graphics()
+    graphics.setDepth(40)
+    graphics.setBlendMode(Phaser.BlendModes.ADD)
+    const intensity = Math.max(1, 3 - (opts.bounceIndex ?? 0))
+    graphics.lineStyle(2 + intensity, 0x9ce8ff, 0.95)
+    graphics.beginPath()
+    graphics.moveTo(fromX, fromY)
+
+    const segments = 6
+    const dirX = toX - fromX
+    const dirY = toY - fromY
+    const normal = new Phaser.Math.Vector2(dirY, -dirX)
+    if (normal.lengthSq() > 0.0001) normal.normalize()
+    for (let i = 1; i < segments; i++) {
+      const t = i / segments
+      const baseX = Phaser.Math.Linear(fromX, toX, t)
+      const baseY = Phaser.Math.Linear(fromY, toY, t)
+      const wobble = (Math.random() - 0.5) * 40 * (1 - Math.abs(0.5 - t) * 1.6)
+      graphics.lineTo(baseX + normal.x * wobble, baseY + normal.y * wobble)
+    }
+    graphics.lineTo(toX, toY)
+    graphics.strokePath()
+
+    this.scene.tweens.add({
+      targets: graphics,
+      alpha: 0,
+      duration: 200,
+      ease: 'Cubic.easeOut',
+      onComplete: () => graphics.destroy()
+    })
+  }
+
+  attachMissileTrail(missile: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody) {
+    if (this.reducedMotion) return
+    if (!this.scene.textures.exists('particle_plasma_spark')) return
+    const emitter = this.scene.add.particles(0, 0, 'particle_plasma_spark', {
+      lifespan: 280,
+      speed: { min: 20, max: 60 },
+      scale: { start: 0.6, end: 0 },
+      alpha: { start: 0.9, end: 0 },
+      blendMode: 'ADD',
+      frequency: 40
+    })
+    emitter.startFollow(missile)
+    missile.once(Phaser.GameObjects.Events.DESTROY, () => emitter.destroy())
+    return emitter
   }
 }
