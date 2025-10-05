@@ -40,7 +40,7 @@ This journal tracks the development progress of Beat Blaster 2.
 - **Status:** [Completed]
 - **Notes/Blockers:** 
   - Implemented Chain Lightning bounce damage, Homing Missile tracking, Time Stop enemy freeze plus HUD/assets updates.
-  - `npm run build` currently fails due to existing syntax errors in `src/editor/ui/PatternEditorUI.ts`.
+  - Fixed legacy `PatternEditorUI` duplicate declarations so `npm run build` now succeeds (still shows Vite glob deprecation warnings).
 - **Associated Files:**
   - `src/scenes/GameScene.ts`
   - `src/systems/Powerups.ts`

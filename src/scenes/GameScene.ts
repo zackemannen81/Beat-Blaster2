@@ -153,6 +153,18 @@ export default class GameScene extends Phaser.Scene {
   private unlockMouseAim = false
   private timeStopActive = false
   private timeStopResumeAt = 0
+  private handleBulletWorldBounds = (body: Phaser.Physics.Arcade.Body) => {
+    const bullet = body.gameObject as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody | undefined
+    if (!bullet) return
+    if (!this.bullets.contains(bullet)) return
+    this.disableBullet(bullet)
+  }
+  private handleMissileWorldBounds = (body: Phaser.Physics.Arcade.Body) => {
+    const missile = body.gameObject as MissileSprite | undefined
+    if (!missile) return
+    if (!this.missiles.contains(missile)) return
+    this.disableMissile(missile)
+  }
 
   private cleanupEnemy(enemy: Enemy, doDeathFx = true) {
     const enemyId = (enemy.getData('eid') as string) ?? null
