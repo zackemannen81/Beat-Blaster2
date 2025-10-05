@@ -17,17 +17,19 @@ This journal tracks the development progress of Beat Blaster 2.
 - **Commit Hash:** `[commit hash]`
 ```
 
-### Task ID: [EDITOR-001, EDITOR-004]
+### Task ID: [EDITOR-001, EDITOR-004, EDITOR-005, EDITOR-006]
 
 - **Start Time:** [2025-10-05 14:00:00]
 - **End Time:** [In Progress]
 - **Status:** [In Progress]
 - **Notes/Blockers:** 
-  - Implementing beat filtering and lane management features in the level editor.
+  - Implementing beat filtering, lane management, and pattern editor features in the level editor.
 - **Associated Files:**
   - `src/scenes/EditorScene.ts`
   - `src/editor/EditorState.ts`
-- **Commit Hash:** `d722047`
+  - `src/editor/ui/PatternEditorUI.ts`
+  - `src/editor/types.ts`
+- **Commit Hash:** `5829989`
 
 ---
 
