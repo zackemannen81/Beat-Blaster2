@@ -94,7 +94,7 @@ export default class EditorScene extends Phaser.Scene {
     this.debugGraphics = this.add.graphics();
     this.timeline = new TimelineUI(this, 16);
     this.palette = new ObjectPaletteUI(this, AVAILABLE_ENEMY_TYPES);
-    this.patternEditor = new PatternEditorUI(this, 400, 250);
+    this.patternEditor = new PatternEditorUI(this, 400, 250, AVAILABLE_ENEMY_TYPES);
 
     this.input.keyboard!.on('keydown-ESC', () => {
       this.scene.start('GameScene');

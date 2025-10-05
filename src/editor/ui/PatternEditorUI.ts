@@ -4,15 +4,17 @@ export class PatternEditorUI {
   private scene: Phaser.Scene;
   private x: number;
   private y: number;
+  private availableEnemyTypes: string[];
   private pattern: any[] = [];
   private nodeObjects: Phaser.GameObjects.GameObject[] = [];
   private selectedNode: any = null;
   private propertyPanelObjects: Phaser.GameObjects.GameObject[] = [];
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
+  constructor(scene: Phaser.Scene, x: number, y: number, availableEnemyTypes: string[]) {
     this.scene = scene;
     this.x = x;
     this.y = y;
+    this.availableEnemyTypes = availableEnemyTypes;
 
     const editorBackground = this.scene.add.graphics();
     editorBackground.fillStyle(0x333333, 1);
@@ -87,15 +89,36 @@ export class PatternEditorUI {
     if (this.selectedNode.type === 'spawn') {
       const enemyTypeText = this.scene.add.text(this.x + 330, this.y + 40, `Enemy Type: ${this.selectedNode.enemyType}`, { color: '#ffffff' });
       const laneText = this.scene.add.text(this.x + 330, this.y + 60, `Lane: ${this.selectedNode.lane}`, { color: '#ffffff' });
-      const timeText = this.scene.add.text(this.x + 330, this.y + 80, `Time: ${this.selectedNode.time}`, { color: '#ffffff' });
-      this.propertyPanelObjects.push(enemyTypeText, laneText, timeText);
+      const timeText = this.scene.add.text(this.x + 330, this.y + 80, `Time:`, { color: '#ffffff' });
+      const timeInput = this.scene.add.dom(this.x + 430, this.y + 90, 'input', 'width: 50px');
+      (timeInput.node as HTMLInputElement).type = 'number';
+      (timeInput.node as HTMLInputElement).value = this.selectedNode.time;
+      timeInput.addListener('change');
+      timeInput.on('change', (event: any) => {
+        this.selectedNode.time = parseInt(event.target.value, 10);
+        this.renderPattern(this.pattern);
+        this.renderPropertyPanel();
+      });
+
+      const laneText = this.scene.add.text(this.x + 330, this.y + 110, `Lane:`, { color: '#ffffff' });
+      const laneInput = this.scene.add.dom(this.x + 430, this.y + 120, 'input', 'width: 50px');
+      (laneInput.node as HTMLInputElement).type = 'number';
+      (laneInput.node as HTMLInputElement).value = this.selectedNode.lane;
+      laneInput.addListener('change');
+      laneInput.on('change', (event: any) => {
+        this.selectedNode.lane = parseInt(event.target.value, 10);
+        this.renderPattern(this.pattern);
+        this.renderPropertyPanel();
+      });
+
+      this.propertyPanelObjects.push(enemyTypeText, timeText, timeInput, laneText, laneInput);
 
       const enemyTypeSelect = this.scene.add.dom(this.x + 430, this.y + 50, 'select');
-      enemyTypeSelect.node.innerHTML = `
-        <option value="swarm">Swarm</option>
-        <option value="brute">Brute</option>
-        <option value="dasher">Dasher</option>
-      `;
+      let options = '';
+      this.availableEnemyTypes.forEach(type => {
+        options += `<option value="${type}">${type}</option>`;
+      });
+      enemyTypeSelect.node.innerHTML = options;
       (enemyTypeSelect.node as HTMLSelectElement).value = this.selectedNode.enemyType;
       enemyTypeSelect.addListener('change');
       enemyTypeSelect.on('change', (event: any) => {
