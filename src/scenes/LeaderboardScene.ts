@@ -42,22 +42,32 @@ export default class LeaderboardScene extends Phaser.Scene {
 
     this.loadLeaderboard();
 
-    this.input.keyboard!.on('keydown-LEFT', () => {
-      this.selectedTrackIndex = (this.selectedTrackIndex - 1 + this.tracks.length) % this.tracks.length;
-      this.loadLeaderboard();
+    // Track navigation buttons
+    const leftButton = this.add.text(width / 2 - 150, 120, '<', { fontSize: '24px', color: '#ffffff' })
+        .setOrigin(0.5).setInteractive({ useHandCursor: true });
+    leftButton.on('pointerdown', () => {
+        this.selectedTrackIndex = (this.selectedTrackIndex - 1 + this.tracks.length) % this.tracks.length;
+        this.loadLeaderboard();
     });
 
-    this.input.keyboard!.on('keydown-RIGHT', () => {
-      this.selectedTrackIndex = (this.selectedTrackIndex + 1) % this.tracks.length;
-      this.loadLeaderboard();
+    const rightButton = this.add.text(width / 2 + 150, 120, '>', { fontSize: '24px', color: '#ffffff' })
+        .setOrigin(0.5).setInteractive({ useHandCursor: true });
+    rightButton.on('pointerdown', () => {
+        this.selectedTrackIndex = (this.selectedTrackIndex + 1) % this.tracks.length;
+        this.loadLeaderboard();
     });
 
-    this.input.keyboard!.on('keydown-UP', () => {
+    // Difficulty navigation buttons
+    const upButton = this.add.text(width / 2, 160 - 20, '^', { fontSize: '20px', color: '#ffffff' })
+        .setOrigin(0.5).setInteractive({ useHandCursor: true });
+    upButton.on('pointerdown', () => {
         this.selectedDifficultyIndex = (this.selectedDifficultyIndex - 1 + this.difficulties.length) % this.difficulties.length;
         this.loadLeaderboard();
     });
 
-    this.input.keyboard!.on('keydown-DOWN', () => {
+    const downButton = this.add.text(width / 2, 160 + 20, 'v', { fontSize: '20px', color: '#ffffff' })
+        .setOrigin(0.5).setInteractive({ useHandCursor: true });
+    downButton.on('pointerdown', () => {
         this.selectedDifficultyIndex = (this.selectedDifficultyIndex + 1) % this.difficulties.length;
         this.loadLeaderboard();
     });
@@ -78,8 +88,8 @@ export default class LeaderboardScene extends Phaser.Scene {
 
     const track = this.tracks[this.selectedTrackIndex];
     const difficulty = this.difficulties[this.selectedDifficultyIndex];
-    this.trackTitle.setText(`< ${track.name} >`);
-    this.difficultyTitle.setText(`^ ${difficulty.toUpperCase()} v`);
+    this.trackTitle.setText(track.name);
+    this.difficultyTitle.setText(difficulty.toUpperCase());
 
     this.clearScores();
     getScores(track.id, difficulty).then(scores => {
