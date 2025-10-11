@@ -5,6 +5,7 @@ import GameScene from './scenes/GameScene'
 import ResultScene from './scenes/ResultScene'
 import OptionsScene from './scenes/OptionsScene'
 import EditorScene from './scenes/EditorScene'
+import LeaderboardScene from './scenes/LeaderboardScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -23,7 +24,7 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false
     }
   },
-  scene: [BootScene, MenuScene, GameScene, ResultScene, OptionsScene, EditorScene]
+  scene: [BootScene, MenuScene, GameScene, ResultScene, OptionsScene, EditorScene, LeaderboardScene]
 }
 
 // eslint-disable-next-line no-new

@@ -6,7 +6,8 @@ import { listSavedPatterns } from '../editor/patternStore';
 type MenuItem =
   | { type: 'resume' }
   | { type: 'track'; track: any }
-  | { type: 'options' };
+  | { type: 'options' }
+  | { type: 'leaderboard' };
 
 export default class MenuScene extends Phaser.Scene {
   private hint!: Phaser.GameObjects.Text;
@@ -89,7 +90,8 @@ export default class MenuScene extends Phaser.Scene {
       });
     });
 
-    this.menuItems.push({ type: 'options' })
+    this.menuItems.push({ type: 'leaderboard' });
+    this.menuItems.push({ type: 'options' });
 
     const savedIndex = this.registry.get('menuIndex');
     if (savedIndex !== undefined) {
@@ -135,6 +137,12 @@ export default class MenuScene extends Phaser.Scene {
         this.sound.play('ui_select', { volume: 0.5 })
         this.handleOptions()
         return
+      }
+
+      if (item.type === 'leaderboard') {
+        this.sound.play('ui_select', { volume: 0.5 });
+        this.scene.start('LeaderboardScene');
+        return;
       }
 
       if (this.hasStarted) return
@@ -225,6 +233,8 @@ export default class MenuScene extends Phaser.Scene {
         text = `${prefix} Resume Game`
       } else if (item.type === 'options') {
         text = `${prefix} Options`
+      } else if (item.type === 'leaderboard') {
+        text = `${prefix} Leaderboard`;
       } else {
         text = `${prefix} ${item.track.name} — ${item.track.artist || ''}`
       }
