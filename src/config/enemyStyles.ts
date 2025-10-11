@@ -10,6 +10,9 @@ export type EnemyType =
   | 'mirrorer'
   | 'teleporter'
   | 'flooder'
+  | 'boss_swarm'
+  | 'boss_juggernaut'
+  | 'boss_trickster'
 
 export interface EnemyStyle extends CubeSkinOptions {
   /** Collision radius for physics body */
@@ -126,5 +129,41 @@ export const enemyStyles: Record<EnemyType, EnemyStyle> = {
     pulseDuration: 340,
     rotationDuration: 0,
     design: 'bar'
+  },
+  boss_swarm: {
+    variant: 'plasma',
+    size: 92,
+    bodyRadius: 44,
+    primaryColor: 0xfccf3a,
+    secondaryColor: 0x452500,
+    glowColor: 0xfff06a,
+    pulseScale: 0.22,
+    pulseDuration: 220,
+    rotationDuration: 2800,
+    design: 'ring'
+  },
+  boss_juggernaut: {
+    variant: 'solid',
+    size: 108,
+    bodyRadius: 52,
+    primaryColor: 0x7c93ff,
+    secondaryColor: 0x0b0f3a,
+    glowColor: 0xc4d3ff,
+    pulseScale: 0.18,
+    pulseDuration: 360,
+    rotationDuration: 5200,
+    design: 'cube'
+  },
+  boss_trickster: {
+    variant: 'wire',
+    size: 88,
+    bodyRadius: 42,
+    primaryColor: 0xff6ff1,
+    secondaryColor: 0x2a0534,
+    glowColor: 0xffbdf9,
+    pulseScale: 0.24,
+    pulseDuration: 260,
+    rotationDuration: 2600,
+    design: 'diamond'
   }
 }

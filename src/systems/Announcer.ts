@@ -20,7 +20,11 @@ const VOICE_CLIPS: Record<AnnouncerVoiceId, Record<string, string>> = {
     new_game: 'announcer_new_game',
     get_ready: 'announcer_new_game',
     warning: 'announcer_warning',
-    enemies_approching: 'announcer_enemies_approching'
+    enemies_approching: 'announcer_enemies_approching',
+    boss: 'announcer_warning',
+    boss_swarm: 'announcer_warning',
+    boss_juggernaut: 'announcer_warning',
+    boss_trickster: 'announcer_warning'
   },
   bee: {
     powerup: 'announcer_bee_powerup',
@@ -35,7 +39,10 @@ const VOICE_CLIPS: Record<AnnouncerVoiceId, Record<string, string>> = {
     warning: 'announcer_bee_warning',
     enemies_approching: 'announcer_bee_enemies_approching',
     boss: 'announcer_bee_boss',
-    enemy: 'announcer_bee_enemy'
+    enemy: 'announcer_bee_enemy',
+    boss_swarm: 'announcer_bee_boss',
+    boss_juggernaut: 'announcer_bee_boss',
+    boss_trickster: 'announcer_bee_enemy'
   },
   cyborg: {
     powerup: 'announcer_cyborg_powerup',
@@ -76,7 +83,10 @@ const VOICE_CLIPS: Record<AnnouncerVoiceId, Record<string, string>> = {
     bomb_deployed: 'announcer_cyborg_bomb_deployed',
     game_over: 'announcer_cyborg_game_over',
     analyzer_fallback: 'announcer_cyborg_analyzer_fallback',
-    analyzer_resync: 'announcer_cyborg_analyzer_resync'
+    analyzer_resync: 'announcer_cyborg_analyzer_resync',
+    boss_swarm: 'announcer_cyborg_enemy_swarm',
+    boss_juggernaut: 'announcer_cyborg_wave_boss',
+    boss_trickster: 'announcer_cyborg_enemy_teleporter'
   }
 }
 
