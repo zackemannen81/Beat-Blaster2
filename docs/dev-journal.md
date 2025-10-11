@@ -99,4 +99,20 @@ This journal tracks the development progress of Beat Blaster 2.
 - **Associated Files:**
   - `tasks/ui/implement_social_features.md`
   - `docs/dev-journal.md`
-- **Commit Hash:** `[pending]`
+- **Commit Hash:** `[pending]`2025-10-11 04:24 CEST — codex
+  Task: GAMEPLAY-003 Implement New Bosses
+  Plan:
+    1) Audit existing boss framework (Spawner, WaveDirector, enemy patterns) to map required hooks.
+    2) Design Swarm/Juggernaut/Trickster behaviours and define reusable data-driven configs.
+    3) Implement boss entities, patterns, and announcer/audio cues.
+    4) Integrate bosses into wave playlists and difficulty tuning.
+    5) Build/regress tests or simulations exercising boss phases.
+  Validation:
+    - pnpm test -i (boss behaviour suites if feasible)
+  Risks:
+    - New boss patterns could destabilise pacing or performance if badly tuned.
+  Evidence:
+    - Pending
+  Next:
+    - Prepare feature branch and baseline checks
+

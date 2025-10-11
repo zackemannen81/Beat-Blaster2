@@ -2,6 +2,8 @@
 
 **Task ID:** GAMEPLAY-003
 
+**Status:** IN_PROGRESS
+
 **Description:**
 
 This task involves implementing the new bosses recommended in `recommendedFeatures.md`. This includes:
