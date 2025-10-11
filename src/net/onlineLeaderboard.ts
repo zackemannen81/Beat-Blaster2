@@ -2,7 +2,7 @@
 export type ScoreEntry = { name: string; score: number; };
 
 const MOCK_LEADERBOARDS: Record<string, Record<string, ScoreEntry[]>> = {
-  'track1': {
+  'track_00': {
     'easy': [
       { name: 'Player1', score: 10000 },
       { name: 'Player2', score: 9000 },
@@ -13,6 +13,8 @@ const MOCK_LEADERBOARDS: Record<string, Record<string, ScoreEntry[]>> = {
       { name: 'Rogue', score: 150 },
       { name: 'Nova', score: 110 },
     ],
+  },
+  'track_01': {
     'normal': [
       { name: 'Player1', score: 20000 },
       { name: 'Player2', score: 18000 },
@@ -23,28 +25,8 @@ const MOCK_LEADERBOARDS: Record<string, Record<string, ScoreEntry[]>> = {
       { name: 'Raptor', score: 180 },
       { name: 'Ghost', score: 120 },
     ],
-    'hard': [
-      { name: 'Player1', score: 30000 },
-      { name: 'Player2', score: 27000 },
-      { name: 'Player3', score: 24000 },
-      { name: 'Vortex', score: 490 },
-      { name: 'Blaze', score: 380 },
-      { name: 'Zero', score: 280 },
-      { name: 'Rogue', score: 200 },
-      { name: 'Nova', score: 150 },
-    ],
   },
-  'track2': {
-    'easy': [
-      { name: 'PlayerA', score: 12000 },
-      { name: 'PlayerB', score: 11000 },
-      { name: 'PlayerC', score: 10500 },
-      { name: 'Apex', score: 460 },
-      { name: 'Cypher', score: 330 },
-      { name: 'Jinx', score: 220 },
-      { name: 'Raptor', score: 160 },
-      { name: 'Ghost', score: 130 },
-    ],
+  'track_02': {
     'normal': [
         { name: 'PlayerA', score: 24000 },
         { name: 'PlayerB', score: 22000 },
@@ -55,6 +37,8 @@ const MOCK_LEADERBOARDS: Record<string, Record<string, ScoreEntry[]>> = {
         { name: 'Rogue', score: 190 },
         { name: 'Nova', score: 140 },
     ],
+  },
+  'track_03': {
     'hard': [
         { name: 'PlayerA', score: 36000 },
         { name: 'PlayerB', score: 33000 },
