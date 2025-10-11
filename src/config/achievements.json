@@ -1,0 +1,31 @@
+
+[
+  {
+    "id": "first_kill",
+    "name": "First Kill",
+    "description": "Defeat your first enemy.",
+    "criteria": {
+      "type": "stat",
+      "stat": "enemies_defeated",
+      "threshold": 1
+    }
+  },
+  {
+    "id": "perfectionist",
+    "name": "Perfectionist",
+    "description": "Finish a song with 100% accuracy.",
+    "criteria": {
+      "type": "accuracy",
+      "threshold": 100
+    }
+  },
+  {
+    "id": "millionaire",
+    "name": "Millionaire",
+    "description": "Score 1,000,000 points on any song.",
+    "criteria": {
+      "type": "score",
+      "threshold": 1000000
+    }
+  }
+]
