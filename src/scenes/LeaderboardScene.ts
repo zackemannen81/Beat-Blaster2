@@ -1,6 +1,6 @@
 
 import Phaser from 'phaser';
-import { getScores, ScoreEntry } from './onlineLeaderboard';
+import { getScores, ScoreEntry } from '../net/onlineLeaderboard';
 
 export default class LeaderboardScene extends Phaser.Scene {
   private tracks: any[] = [];
