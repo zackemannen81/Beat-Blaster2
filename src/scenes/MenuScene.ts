@@ -7,7 +7,8 @@ type MenuItem =
   | { type: 'resume' }
   | { type: 'track'; track: any }
   | { type: 'options' }
-  | { type: 'leaderboard' };
+  | { type: 'leaderboard' }
+  | { type: 'profile' };
 
 export default class MenuScene extends Phaser.Scene {
   private hint!: Phaser.GameObjects.Text;
@@ -91,6 +92,7 @@ export default class MenuScene extends Phaser.Scene {
     });
 
     this.menuItems.push({ type: 'leaderboard' });
+    this.menuItems.push({ type: 'profile' });
     this.menuItems.push({ type: 'options' });
 
     const savedIndex = this.registry.get('menuIndex');
@@ -142,6 +144,12 @@ export default class MenuScene extends Phaser.Scene {
       if (item.type === 'leaderboard') {
         this.sound.play('ui_select', { volume: 0.5 });
         this.scene.start('LeaderboardScene');
+        return;
+      }
+
+      if (item.type === 'profile') {
+        this.sound.play('ui_select', { volume: 0.5 });
+        this.scene.start('ProfileScene');
         return;
       }
 
@@ -235,6 +243,8 @@ export default class MenuScene extends Phaser.Scene {
         text = `${prefix} Options`
       } else if (item.type === 'leaderboard') {
         text = `${prefix} Leaderboard`;
+      } else if (item.type === 'profile') {
+        text = `${prefix} Profile`;
       } else {
         text = `${prefix} ${item.track.name} — ${item.track.artist || ''}`
       }

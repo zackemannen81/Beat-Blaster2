@@ -21,6 +21,7 @@ import EnemyLifecycle from '../systems/EnemyLifecycle'
 import type { WaveDescriptor } from '../types/waves'
 import { getWavePlaylist } from '../systems/WaveLibrary'
 import Announcer, { AnnouncerVoiceId } from '../systems/Announcer'
+import { AchievementSystem } from '../systems/AchievementSystem'
 
 import { loadPatternData } from '../editor/patternStore';
 import { CustomPattern } from '../systems/patterns/CustomPattern';
@@ -64,6 +65,7 @@ export default class GameScene extends Phaser.Scene {
   private bombReadyAnnounced = false
   private metronome = false
   private announcer!: Announcer
+  private achievementSystem!: AchievementSystem
   private lastDashToggle = 0
   private lastBeatAt = 0
   private beatCount = 0
@@ -222,6 +224,8 @@ export default class GameScene extends Phaser.Scene {
     this.announcer = new Announcer(this, () => this.opts.sfxVolume, {
       voice: preferredVoice
     })
+
+    this.achievementSystem = new AchievementSystem()
 
     this.neon = new NeonGrid(this)
     this.neon.create()
@@ -754,6 +758,7 @@ this.lastHitAt = this.time.now
   if (newHp <= 0) {
     this.sound.play('hit_enemy', { volume: this.opts.sfxVolume })
     this.scoring.addKill(etype)
+    this.achievementSystem.checkStatAchievement('enemies_defeated', this.scoring.getKills())
     this.bumpBomb(10)
     this.maybeDropPickup(enemy.x, enemy.y)
 
@@ -2888,10 +2893,12 @@ pskin?.setThrust?.(thrustLevel)
     
     // Transition to the results scene after a short delay
     this.time.delayedCall(2000, () => {
-        this.scene.start('ResultsScene', { 
+        const shots = this.scoring.shots || 1;
+        const accuracy = ((this.scoring.perfect + this.scoring.good) / shots) * 100;
+        this.scene.start('ResultScene', { 
             score: this.scoring.score, 
-            accuracy: (this.scoring.perfect + this.scoring.good) / this.scoring.shots, 
-            combo: this.scoring.maxCombo 
+            accuracy: accuracy, 
+            kills: this.scoring.getKills()
         });
     });
   }
