@@ -463,6 +463,7 @@ export default class GameScene extends Phaser.Scene {
     const track = tracks?.find((t) => t.id === selId)
 
     this.difficultyProfile = getDifficultyProfile(track?.difficultyProfileId)
+    this.registry.set('selectedDifficultyId', this.difficultyProfile.id)
     this.currentStage = this.difficultyProfile.stageTuning[0]?.stage ?? 1
     this.currentStageConfig = this.getStageConfig(this.currentStage)
     this.difficultyLabel = this.difficultyProfile.label

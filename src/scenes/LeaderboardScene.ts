@@ -7,6 +7,9 @@ export default class LeaderboardScene extends Phaser.Scene {
   private selectedTrackIndex: number = 0;
   private scoreTexts: Phaser.GameObjects.Text[] = [];
   private trackTitle!: Phaser.GameObjects.Text;
+  private difficulties = ['easy', 'normal', 'hard'];
+  private selectedDifficultyIndex = 1;
+  private difficultyTitle!: Phaser.GameObjects.Text;
 
   constructor() {
     super('LeaderboardScene');
@@ -31,6 +34,12 @@ export default class LeaderboardScene extends Phaser.Scene {
       color: '#a0e9ff'
     }).setOrigin(0.5);
 
+    this.difficultyTitle = this.add.text(width / 2, 160, '', {
+        fontFamily: 'UiFont, sans-serif',
+        fontSize: '20px',
+        color: '#ffffff'
+    }).setOrigin(0.5);
+
     this.loadLeaderboard();
 
     this.input.keyboard!.on('keydown-LEFT', () => {
@@ -41,6 +50,16 @@ export default class LeaderboardScene extends Phaser.Scene {
     this.input.keyboard!.on('keydown-RIGHT', () => {
       this.selectedTrackIndex = (this.selectedTrackIndex + 1) % this.tracks.length;
       this.loadLeaderboard();
+    });
+
+    this.input.keyboard!.on('keydown-UP', () => {
+        this.selectedDifficultyIndex = (this.selectedDifficultyIndex - 1 + this.difficulties.length) % this.difficulties.length;
+        this.loadLeaderboard();
+    });
+
+    this.input.keyboard!.on('keydown-DOWN', () => {
+        this.selectedDifficultyIndex = (this.selectedDifficultyIndex + 1) % this.difficulties.length;
+        this.loadLeaderboard();
     });
 
     this.add.text(width / 2, height - 50, 'ESC: Menu', {
@@ -58,10 +77,12 @@ export default class LeaderboardScene extends Phaser.Scene {
     if (this.tracks.length === 0) return;
 
     const track = this.tracks[this.selectedTrackIndex];
+    const difficulty = this.difficulties[this.selectedDifficultyIndex];
     this.trackTitle.setText(`< ${track.name} >`);
+    this.difficultyTitle.setText(`^ ${difficulty.toUpperCase()} v`);
 
     this.clearScores();
-    getScores(track.id).then(scores => {
+    getScores(track.id, difficulty).then(scores => {
       this.displayScores(scores);
     });
   }

@@ -42,10 +42,11 @@ export default class ResultScene extends Phaser.Scene {
 
     // Save to local leaderboard (prompt name once)
     const trackId = (this.registry.get('selectedTrackId') as string) || 'unknown'
+    const difficultyId = (this.registry.get('selectedDifficultyId') as string) || 'normal'
     const name = window.prompt('Enter your name for the leaderboard:', localStorage.getItem('bb_name') || 'AAA') || 'Anon'
     localStorage.setItem('bb_name', name)
     addScore({ name, trackId, score, date: Date.now() })
-    submitScore(trackId, name, score);
+    submitScore(trackId, difficultyId, name, score);
 
     const list = loadBoard().slice(0, 5)
     const text = list.map((e, i) => `${i + 1}. ${e.name.padEnd(8, ' ')}  ${e.score}`).join('\n')

@@ -36,7 +36,7 @@ export class AchievementSystem {
       this.unlockedAchievements.add(achievementId);
       localStorage.setItem('unlocked_achievements', JSON.stringify(Array.from(this.unlockedAchievements)));
       console.log(`Achievement unlocked: ${achievement.name}`);
-      // We can dispatch an event here to show a notification in the UI
+      window.dispatchEvent(new CustomEvent('achievement_unlocked', { detail: achievement }));
     }
   }
 

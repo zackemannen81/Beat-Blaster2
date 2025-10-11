@@ -46,7 +46,7 @@ export default class MenuScene extends Phaser.Scene {
     logo.setOrigin(0.5);
     logo.setScale(Math.min(width / 1920, height / 1080) * 0.5);
 
-    this.hint = this.add.text(width / 2, height * 0.9, 'SPACE: Play   ↑/↓: Select   O: Options', {
+    this.hint = this.add.text(width / 2, height * 0.9, 'SPACE: Play   ↑/↓: Select', {
       fontFamily: 'UiFont2, sans-serif',
       fontSize: '16px',
       color: '#a0e9ff'
@@ -66,6 +66,40 @@ export default class MenuScene extends Phaser.Scene {
       color: '#7ddff2'
     }).setOrigin(0.5);
     this.refreshModeLabel();
+
+    const buttonY = height * 0.95;
+
+    // Leaderboard Button
+    const leaderboardButton = this.add.text(width * 0.3, buttonY, 'Leaderboard', {
+      fontFamily: 'UiFont, sans-serif',
+      fontSize: '18px',
+      color: '#ffffff'
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    leaderboardButton.on('pointerdown', () => {
+      this.sound.play('ui_select', { volume: 0.5 });
+      this.scene.start('LeaderboardScene');
+    });
+
+    // Profile Button
+    const profileButton = this.add.text(width * 0.5, buttonY, 'Profile', {
+      fontFamily: 'UiFont, sans-serif',
+      fontSize: '18px',
+      color: '#ffffff'
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    profileButton.on('pointerdown', () => {
+      this.sound.play('ui_select', { volume: 0.5 });
+      this.scene.start('ProfileScene');
+    });
+
+    // Options Button
+    const optionsButton = this.add.text(width * 0.7, buttonY, 'Options', {
+      fontFamily: 'UiFont, sans-serif',
+      fontSize: '18px',
+      color: '#ffffff'
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    optionsButton.on('pointerdown', () => {
+      this.handleOptions();
+    });
 
     this.tracks = this.registry.get('tracks') || [];
     const initialId = this.registry.get('selectedTrackId');
@@ -91,9 +125,7 @@ export default class MenuScene extends Phaser.Scene {
       });
     });
 
-    this.menuItems.push({ type: 'leaderboard' });
-    this.menuItems.push({ type: 'profile' });
-    this.menuItems.push({ type: 'options' });
+
 
     const savedIndex = this.registry.get('menuIndex');
     if (savedIndex !== undefined) {
@@ -135,23 +167,7 @@ export default class MenuScene extends Phaser.Scene {
       const item = this.menuItems[this.index]
       if (!item) return
 
-      if (item.type === 'options') {
-        this.sound.play('ui_select', { volume: 0.5 })
-        this.handleOptions()
-        return
-      }
 
-      if (item.type === 'leaderboard') {
-        this.sound.play('ui_select', { volume: 0.5 });
-        this.scene.start('LeaderboardScene');
-        return;
-      }
-
-      if (item.type === 'profile') {
-        this.sound.play('ui_select', { volume: 0.5 });
-        this.scene.start('ProfileScene');
-        return;
-      }
 
       if (this.hasStarted) return
       this.hasStarted = true
@@ -205,13 +221,13 @@ export default class MenuScene extends Phaser.Scene {
     k.on('keydown-UP', this.handleUp, this)
     k.on('keydown-DOWN', this.handleDown, this)
     k.on('keydown-SPACE', this.handlePlay, this)
-    k.on('keydown-O', this.handleOptions, this)
+
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       k.off('keydown-UP', this.handleUp, this)
       k.off('keydown-DOWN', this.handleDown, this)
       k.off('keydown-SPACE', this.handlePlay, this)
-      k.off('keydown-O', this.handleOptions, this)
+
       this.events.off(Phaser.Scenes.Events.RESUME, this.refreshModeLabel, this)
     })
 
@@ -239,12 +255,6 @@ export default class MenuScene extends Phaser.Scene {
       let text: string
       if (item.type === 'resume') {
         text = `${prefix} Resume Game`
-      } else if (item.type === 'options') {
-        text = `${prefix} Options`
-      } else if (item.type === 'leaderboard') {
-        text = `${prefix} Leaderboard`;
-      } else if (item.type === 'profile') {
-        text = `${prefix} Profile`;
       } else {
         text = `${prefix} ${item.track.name} — ${item.track.artist || ''}`
       }

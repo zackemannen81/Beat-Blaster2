@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import Powerups, { PowerupEvent, PowerupType } from '../systems/Powerups'
 import { BeatJudgement } from '../systems/BeatWindow'
 import { AccuracyLevel } from '../systems/Scoring'
+import { Achievement } from '../systems/AchievementSystem'
 
 type PowerupSlot = {
   container: Phaser.GameObjects.Container
@@ -63,6 +64,7 @@ export default class HUD {
   private sideOrnaments!: Phaser.GameObjects.Graphics
   private beatVisualizer!: Phaser.GameObjects.Graphics
   private beatLevels = { low: 0, mid: 0, high: 0 }
+  private achievementText!: Phaser.GameObjects.Text
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene
@@ -130,7 +132,36 @@ export default class HUD {
     this.scene.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this)
     this.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scene.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this)
+      window.removeEventListener('achievement_unlocked', this.handleAchievementUnlocked)
     })
+
+    this.achievementText = this.scene.add.text(width / 2, height - 50, '', {
+      fontFamily: 'UiFont, sans-serif',
+      fontSize: '24px',
+      color: '#ffd866',
+      stroke: '#000',
+      strokeThickness: 4
+    }).setOrigin(0.5).setDepth(100).setAlpha(0);
+
+    window.addEventListener('achievement_unlocked', this.handleAchievementUnlocked)
+  }
+
+  private handleAchievementUnlocked = (event: Event) => {
+    const achievement = (event as CustomEvent).detail as Achievement;
+    this.showAchievementNotification(achievement);
+  }
+
+  private showAchievementNotification(achievement: Achievement) {
+    this.achievementText.setText(`Achievement Unlocked: ${achievement.name}`);
+    this.achievementText.setAlpha(1);
+    this.scene.tweens.killTweensOf(this.achievementText);
+    this.scene.tweens.add({
+      targets: this.achievementText,
+      alpha: 0,
+      delay: 3000,
+      duration: 500,
+      ease: 'Sine.easeOut'
+    });
   }
 
   flashBeat(band: 'low' | 'mid' | 'high') {
