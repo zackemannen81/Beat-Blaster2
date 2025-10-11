@@ -20,7 +20,9 @@ Web (HTML5/JavaScript)
 - **Multiple Difficulty Levels:** Easy, Normal, Hard, Expert.
 - **Diverse Music Tracks:** Variety of genres and tempos.
 - **Customizable Controls:** Keybindings configurable by the player.
-- **Leaderboards:** Online or local high score tracking.
+- **Leaderboards:** Online high score tracking for each track and difficulty.
+- **Achievements:** Unlockable achievements for completing in-game challenges.
+- **Player Profiles:** Customizable player profiles with stats and unlocked achievements.
 - **Level Editor:**
     - **Track Import:** Ability to import custom music files (e.g., .mp3, .ogg).
     - **Note Placement:** Intuitive interface for placing notes, holds, and other rhythm elements.
