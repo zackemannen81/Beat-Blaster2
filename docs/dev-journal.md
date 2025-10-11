@@ -84,3 +84,19 @@ This journal tracks the development progress of Beat Blaster 2.
 - **Commit Hash:** `[pending]`
 
 ---
+
+---
+
+### Task ID: [UI-001]
+
+- **Start Time:** 2025-10-11 12:30:00
+- **End Time:** [In Progress]
+- **Status:** In Progress
+- **Notes/Blockers:** 
+  - Starting work on social features (Task UI-001).
+  - Plan is to first integrate the existing leaderboard code into a proper feature branch.
+  - Then, implement achievements and player profiles.
+- **Associated Files:**
+  - `tasks/ui/implement_social_features.md`
+  - `docs/dev-journal.md`
+- **Commit Hash:** `[pending]`

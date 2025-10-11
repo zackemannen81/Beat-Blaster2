@@ -1,6 +1,7 @@
 # Implement Social Features
 
 **Task ID:** UI-001
+**Status:** IN_PROGRESS
 
 **Description:**
 
