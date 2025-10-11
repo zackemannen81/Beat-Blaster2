@@ -51,6 +51,9 @@ export default class Scoring {
       | 'mirrorer'
       | 'teleporter'
       | 'flooder'
+      | 'boss_swarm'
+      | 'boss_juggernaut'
+      | 'boss_trickster'
   ) {
     const base = type === 'brute'
       ? 100
@@ -68,7 +71,13 @@ export default class Scoring {
                   ? 95
                   : type === 'flooder'
                     ? 130
-                    : 25
+                    : type === 'boss_swarm'
+                      ? 320
+                      : type === 'boss_juggernaut'
+                        ? 480
+                        : type === 'boss_trickster'
+                          ? 360
+                          : 25
     this.score += Math.round(base * this.multiplier)
     this.kills++
   }

@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import CubeSkin from '../systems/CubeSkin'
 import { enemyStyles, EnemyType } from '../config/enemyStyles'
+import { BossBehavior } from '../types/bosses'
 import { WaveDescriptor, FormationId } from '../types/waves'
 import { showTelegraph } from './Telegraph'
 import LaneManager from './LaneManager'
@@ -21,7 +22,7 @@ export type PatternData =
   | { kind: 'mirrorer'; speedY: number }
   | { kind: 'teleporter'; laneIndex: number; speedY: number }
   | { kind: 'lane_flood'; laneIndex: number; width: number; height: number; speedY: number }
-  | { kind: 'boss'; speedY: number }
+  | { kind: 'boss'; speedY: number; behavior?: BossBehavior; settleY?: number; amplitude?: number; phase?: number }
 
 type SpawnConfig = {
   type: EnemyType
@@ -36,6 +37,9 @@ type SpawnConfig = {
   tint?: number
   isBoss?: boolean
   waveId?: string
+  bossLabel?: string
+  bossBehavior?: BossBehavior
+  data?: Record<string, unknown>
 }
 
 export default class Spawner {
@@ -102,7 +106,13 @@ export default class Spawner {
                     ? 100
                     : type === 'flooder'
                       ? 45
-                      : 65
+                      : type === 'boss_swarm'
+                        ? 60
+                        : type === 'boss_juggernaut'
+                          ? 45
+                          : type === 'boss_trickster'
+                            ? 70
+                            : 65
       const speed = speedBase * 0.25
       const enemy = this.createEnemy({
         type,
@@ -116,6 +126,20 @@ export default class Spawner {
       spawned.push(enemy)
     }
     return spawned
+  }
+
+  spawnAt(
+    type: EnemyType,
+    x: number,
+    y: number,
+    options: Partial<Omit<SpawnConfig, 'type' | 'x' | 'y'>> = {}
+  ): Enemy {
+    return this.createEnemy({
+      type,
+      x,
+      y,
+      ...options
+    })
   }
 
   spawnVerticalLane(
@@ -821,7 +845,19 @@ export default class Spawner {
     return enemies
   }
 
-  spawnBoss(type: EnemyType = 'brute', options: { hp?: number; speedMultiplier?: number } = {}): Enemy {
+  spawnBoss(
+    type: EnemyType,
+    options: {
+      hp?: number
+      speedMultiplier?: number
+      scale?: number
+      label?: string
+      behavior?: BossBehavior
+      tint?: number
+      hpMultiplier?: number
+      data?: Record<string, unknown>
+    } = {}
+  ): Enemy {
     const { width } = this.scene.scale
     const speedY = this.scrollBase * (options.speedMultiplier ?? 0.6)
     return this.createEnemy({
@@ -829,10 +865,20 @@ export default class Spawner {
       x: width / 2,
       y: -100,
       velocityY: speedY,
-      pattern: { kind: 'boss', speedY },
-      scale: 1.8,
-      hpOverride: options.hp ?? 60,
-      isBoss: true
+      pattern: {
+        kind: 'boss',
+        speedY,
+        behavior: options.behavior,
+        settleY: this.scene.scale.height * 0.22
+      },
+      scale: options.scale ?? 1.8,
+      hpOverride: options.hp,
+      hpMultiplier: options.hpMultiplier,
+      isBoss: true,
+      bossLabel: options.label,
+      bossBehavior: options.behavior,
+      tint: options.tint,
+      data: options.data
     })
   }
 
@@ -879,7 +925,13 @@ export default class Spawner {
                   ? 3
                   : config.type === 'flooder'
                     ? 6
-                    : 1
+                    : config.type === 'boss_swarm'
+                      ? 180
+                      : config.type === 'boss_juggernaut'
+                        ? 260
+                        : config.type === 'boss_trickster'
+                          ? 150
+                          : 1
     const baseHp = typeof baseHpFromBalance === 'number' && Number.isFinite(baseHpFromBalance)
       ? baseHpFromBalance
       : fallbackBaseHp
@@ -916,7 +968,13 @@ export default class Spawner {
               ? 0.75
               : config.type === 'flooder'
                 ? 0.35
-                : 0.75
+                : config.type === 'boss_swarm'
+                  ? 0.4
+                  : config.type === 'boss_juggernaut'
+                    ? 0.25
+                    : config.type === 'boss_trickster'
+                      ? 0.45
+                      : 0.75
     const defaultVy = config.velocityY ?? this.scrollBase * baseVyMul
     body.setVelocity(config.velocityX ?? 0, defaultVy)
     if (config.type === 'exploder') {
@@ -929,6 +987,13 @@ export default class Spawner {
     sprite.setData('pattern', pattern)
     sprite.setData('isBoss', config.isBoss ?? false)
     sprite.setData('waveId', config.waveId ?? null)
+    if (config.bossLabel) sprite.setData('bossLabel', config.bossLabel)
+    if (config.bossBehavior) sprite.setData('bossBehavior', config.bossBehavior)
+    if (config.data) {
+      for (const [key, value] of Object.entries(config.data)) {
+        sprite.setData(key, value)
+      }
+    }
     if (pattern && pattern.kind === 'lane_hopper') {
       sprite.setData('laneHopCurrent', pattern.laneA)
       sprite.setData('laneHopBeatCount', 0)
@@ -961,6 +1026,11 @@ export default class Spawner {
     if (type === 'weaver') return 'enemy_dasher_0'
     if (type === 'formation') return 'enemy_brute_0'
     if (type === 'mirrorer') return 'enemy_dasher_0'
+    if (type === 'teleporter') return 'enemy_dasher_0'
+    if (type === 'flooder') return 'enemy_brute_0'
+    if (type === 'boss_swarm') return 'enemy_swarm_0'
+    if (type === 'boss_juggernaut') return 'enemy_brute_0'
+    if (type === 'boss_trickster') return 'enemy_dasher_0'
     return 'enemy_swarm_0'
   }
 

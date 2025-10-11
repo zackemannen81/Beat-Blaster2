@@ -19,6 +19,8 @@ import { getDifficultyProfile, DifficultyProfile, DifficultyProfileId, StageTuni
 import WaveDirector from '../systems/WaveDirector'
 import EnemyLifecycle from '../systems/EnemyLifecycle'
 import type { WaveDescriptor } from '../types/waves'
+import type { EnemyType } from '../config/enemyStyles'
+import type { BossDefinition, BossBehavior } from '../types/bosses'
 import { getWavePlaylist } from '../systems/WaveLibrary'
 import Announcer, { AnnouncerVoiceId } from '../systems/Announcer'
 import { AchievementSystem } from '../systems/AchievementSystem'
@@ -36,6 +38,8 @@ type BulletMetadata = {
   accuracy: AccuracyLevel
   isPerfect: boolean
 }
+
+type BossPattern = Extract<PatternData, { kind: 'boss' }>
 
 export default class GameScene extends Phaser.Scene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
@@ -131,6 +135,37 @@ export default class GameScene extends Phaser.Scene {
   private isPaused = false
   private barsElapsed = 0
   private bossSpawned = false
+  private readonly bossRoster: BossDefinition[] = [
+    {
+      type: 'boss_swarm',
+      label: 'The Swarm',
+      behavior: 'swarm',
+      hp: 160,
+      speedMultiplier: 0.58,
+      scale: 1.55,
+      announcerKey: 'boss_swarm'
+    },
+    {
+      type: 'boss_juggernaut',
+      label: 'The Juggernaut',
+      behavior: 'juggernaut',
+      hp: 220,
+      speedMultiplier: 0.5,
+      scale: 1.85,
+      announcerKey: 'boss_juggernaut'
+    },
+    {
+      type: 'boss_trickster',
+      label: 'The Trickster',
+      behavior: 'trickster',
+      hp: 170,
+      speedMultiplier: 0.57,
+      scale: 1.6,
+      announcerKey: 'boss_trickster'
+    }
+  ]
+  private bossRotationIndex = 0
+  private activeBossSpec: BossDefinition | null = null
   private enemyHpMultiplier = this.difficultyProfile.baseEnemyHpMultiplier
   private bossHpMultiplier = this.difficultyProfile.baseBossHpMultiplier
   private missPenalty = this.difficultyProfile.missPenalty
@@ -705,7 +740,7 @@ export default class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.bullets, this.spawner.getGroup(), (_b, _e) => {
       const bullet = _b as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody
       const enemy = _e as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody
-      const etype = (enemy.getData('etype') as 'brute' | 'dasher' | 'swarm' | 'exploder' | 'weaver' | 'formation' | 'mirrorer') || 'swarm'
+      const etype = (enemy.getData('etype') as EnemyType) || 'swarm'
 
       const { damage, isPerfect } = this.readBulletMetadata(bullet)
       if (damage <= 0) {
@@ -714,12 +749,14 @@ export default class GameScene extends Phaser.Scene {
       }
 
       const hp = (enemy.getData('hp') as number) ?? 1
-      const newHp = hp - damage
+      const isBoss = enemy.getData('isBoss') === true
+      const appliedDamage = isBoss ? this.applyBossDamageModifiers(enemy, damage) : damage
+      const newHp = hp - appliedDamage
       enemy.setData('hp', newHp)
       const maxHp = (enemy.getData('maxHp') as number) ?? hp
-      const isBoss = enemy.getData('isBoss') === true
       if (isBoss) {
-        this.hud.setBossHealth(Math.max(newHp, 0) / Math.max(maxHp, 1), enemy.getData('etype') as string)
+        this.hud.setBossHealth(Math.max(newHp, 0) / Math.max(maxHp, 1), this.resolveBossLabel(enemy))
+        this.onBossDamaged(enemy, appliedDamage, hp, newHp)
       }
 
       this.disableBullet(bullet)
@@ -802,9 +839,12 @@ this.lastHitAt = this.time.now
       if (!isBoss) {
         this.cleanupEnemy(enemy, false)
       } else {
+        const bossId = enemy.getData('eid') as string | undefined
+        if (bossId) this.cleanupBossMinions(bossId)
         this.hud.setBossHealth(null)
         this.bossSpawned = false
         this.activeBoss = null
+        this.activeBossSpec = null
       }
     })
 
@@ -858,7 +898,7 @@ this.lastHitAt = this.time.now
       if (this.activeBoss && this.activeBoss.active) {
         const maxHp = (this.activeBoss.getData('maxHp') as number) ?? 1
         const hp = (this.activeBoss.getData('hp') as number) ?? maxHp
-        this.hud.setBossHealth(Math.max(hp, 0) / Math.max(maxHp, 1), this.activeBoss.getData('etype') as string)
+        this.hud.setBossHealth(Math.max(hp, 0) / Math.max(maxHp, 1), this.resolveBossLabel(this.activeBoss))
       } else {
         this.hud.setBossHealth(null)
       }
@@ -1106,7 +1146,7 @@ pskin?.setThrust?.(thrustLevel)
     const group = this.spawner.getGroup()
     const now = this.time.now
     if (this.gameplayMode === 'vertical') {
-      this.updateVerticalEnemies(group, now)
+      this.updateVerticalEnemies(group, now, delta)
     } else {
       const px = this.player.x
       const py = this.player.y
@@ -1119,7 +1159,7 @@ pskin?.setThrust?.(thrustLevel)
           healthBar?.destroy()
           return false
         }
-        const etype = (s.getData('etype') as 'brute' | 'dasher' | 'swarm' | 'exploder' | 'weaver' | 'formation' | 'mirrorer') || 'swarm'
+        const etype = (s.getData('etype') as EnemyType) || 'swarm'
         const ang = Phaser.Math.Angle.Between(s.x, s.y, px, py)
         let speed = (etype === 'swarm' ? 110 : etype === 'dasher' ? 160 : 80) * 0.5
         if (etype === 'dasher' && dashPhase % 2 === 0) speed *= dashBoost
@@ -1170,6 +1210,339 @@ pskin?.setThrust?.(thrustLevel)
       }
       return true
     })
+  }
+
+  private resolveBossLabel(enemy: Enemy | null | undefined): string {
+    if (!enemy) return 'BOSS'
+    const label = enemy.getData('bossLabel') as string | undefined
+    if (label && label.length > 0) return label
+    const etype = enemy.getData('etype') as string | undefined
+    return etype && etype.length > 0 ? etype : 'BOSS'
+  }
+
+  private getNextBossSpec(): BossDefinition {
+    if (this.bossRoster.length === 0) {
+      return {
+        type: 'boss_juggernaut',
+        label: 'Boss',
+        behavior: 'juggernaut',
+        hp: 200,
+        speedMultiplier: 0.55,
+        announcerKey: 'boss'
+      }
+    }
+    const index = this.bossRotationIndex % this.bossRoster.length
+    this.bossRotationIndex += 1
+    return this.bossRoster[index]
+  }
+
+  private spawnBossFromSpec(spec: BossDefinition): Enemy {
+    const now = this.time.now
+    const data: Record<string, unknown> = { bossSettled: false }
+    switch (spec.behavior) {
+      case 'swarm':
+        data.bossNextSpawnAt = now + 1800
+        data.bossOscPhase = Math.random() * Math.PI * 2
+        data.bossOscAmplitude = this.scale.width * 0.24
+        data.bossBaseY = this.scale.height * 0.24
+        break
+      case 'juggernaut':
+        data.bossShieldActive = true
+        data.bossNextChargeAt = now + 3600
+        data.bossChargeDuration = 1500
+        data.bossChargeCooldown = 4200
+        data.bossCharging = false
+        break
+      case 'trickster':
+        data.bossNextTeleportAt = now + 3000
+        data.bossTeleportCooldown = 3200
+        data.bossTeleporting = false
+        data.bossLastTeleportX = this.scale.width * 0.5
+        break
+    }
+    const boss = this.spawner.spawnBoss(spec.type, {
+      hp: spec.hp,
+      speedMultiplier: spec.speedMultiplier,
+      scale: spec.scale,
+      label: spec.label,
+      behavior: spec.behavior,
+      data
+    })
+    boss.setDepth(5)
+    return boss
+  }
+
+  private updateBossBehavior(enemy: Enemy, body: Phaser.Physics.Arcade.Body, pattern: PatternData, now: number, _delta: number) {
+    if (this.timeStopActive) {
+      body.setVelocity(0, 0)
+      return
+    }
+    const settled = this.applyBossBaseMotion(enemy, body, pattern)
+    const behavior = enemy.getData('bossBehavior') as BossBehavior | undefined
+    if (!behavior) return
+    switch (behavior) {
+      case 'swarm':
+        if (settled) this.updateSwarmBoss(enemy, now)
+        break
+      case 'juggernaut':
+        this.updateJuggernautBoss(enemy, body, now)
+        break
+      case 'trickster':
+        this.updateTricksterBoss(enemy, body, now)
+        break
+    }
+  }
+
+  private applyBossBaseMotion(enemy: Enemy, body: Phaser.Physics.Arcade.Body, pattern: PatternData): boolean {
+    const bossPattern = pattern as BossPattern
+    const settleLine = bossPattern.settleY ?? this.scale.height * 0.24
+    if (enemy.getData('bossTeleporting') === true) {
+      body.setVelocity(0, 0)
+      return enemy.getData('bossSettled') === true
+    }
+    if (enemy.y < settleLine - 6) {
+      body.setVelocity(0, bossPattern.speedY)
+      return false
+    }
+    const baseY = (enemy.getData('bossBaseY') as number) ?? settleLine
+    enemy.y = Phaser.Math.Linear(enemy.y, baseY, 0.08)
+    body.setVelocity(0, bossPattern.speedY * 0.08)
+    if (enemy.getData('bossSettled') !== true) {
+      enemy.setData('bossSettled', true)
+      enemy.setData('bossBaseY', settleLine)
+    }
+    return true
+  }
+
+  private updateSwarmBoss(enemy: Enemy, now: number) {
+    if (enemy.getData('bossSettled') !== true) return
+    if (this.timeStopActive) return
+    const amplitude = (enemy.getData('bossOscAmplitude') as number) ?? this.scale.width * 0.22
+    const phase = (enemy.getData('bossOscPhase') as number) ?? 0
+    const baseY = (enemy.getData('bossBaseY') as number) ?? this.scale.height * 0.24
+    const t = now * 0.00085
+    const center = this.scale.width * 0.5
+    const oscillation = Math.sin(t + phase) * amplitude
+    enemy.x = Phaser.Math.Clamp(center + oscillation, 80, this.scale.width - 80)
+    const verticalSway = Math.cos(t * 1.3 + phase) * 14
+    enemy.y = Phaser.Math.Linear(enemy.y, baseY + verticalSway, 0.08)
+
+    const nextSpawnAt = (enemy.getData('bossNextSpawnAt') as number) ?? now + 1800
+    if (now < nextSpawnAt) return
+    const parentId = enemy.getData('eid') as string | undefined
+    if (!parentId) return
+    const hp = (enemy.getData('hp') as number) ?? 1
+    const maxHp = (enemy.getData('maxHp') as number) ?? hp
+    const healthRatio = hp / Math.max(maxHp, 1)
+    const targetCount = healthRatio < 0.45 ? 6 : 4
+    const existing = this.countBossMinions(parentId)
+    if (existing < targetCount + 2 && this.spawner.getGroup().countActive(true) < this.enemyCap) {
+      this.spawnSwarmMinions(enemy, targetCount)
+    }
+    const interval = healthRatio < 0.45 ? 1400 : 2000
+    enemy.setData('bossNextSpawnAt', now + interval)
+  }
+
+  private spawnSwarmMinions(boss: Enemy, count: number) {
+    const parentId = boss.getData('eid') as string | undefined
+    if (!parentId) return
+    const baseAngle = Math.random() * Math.PI * 2
+    for (let i = 0; i < count; i++) {
+      const angle = baseAngle + (i / Math.max(1, count)) * Math.PI * 2
+      const radius = 70 + Math.random() * 26
+      const offsetX = Math.cos(angle) * radius
+      const offsetY = Math.sin(angle) * 34 + 40
+      const vx = offsetX * 0.18
+      const vy = this.scrollBase * 0.9
+      const minion = this.spawner.spawnAt('swarm', boss.x + offsetX, boss.y + offsetY, {
+        velocityX: vx,
+        velocityY: vy,
+        pattern: { kind: 'drift', velocityX: vx, speedY: vy },
+        hpOverride: 3,
+        hpMultiplier: 0.6,
+        tint: 0xfde07b,
+        data: { bossParentId: parentId }
+      })
+      minion.setDepth(3)
+    }
+  }
+
+  private countBossMinions(parentId: string): number {
+    let count = 0
+    const group = this.spawner.getGroup()
+    group.children.each((obj: Phaser.GameObjects.GameObject) => {
+      const enemy = obj as Enemy
+      if (!enemy.active) return true
+      if (enemy.getData('bossParentId') === parentId) count += 1
+      return true
+    })
+    return count
+  }
+
+  private updateJuggernautBoss(enemy: Enemy, body: Phaser.Physics.Arcade.Body, now: number) {
+    if (enemy.getData('bossSettled') !== true) return
+    const shieldActive = enemy.getData('bossShieldActive') !== false && enemy.getData('bossWeakpointUnlocked') !== true
+    if (shieldActive) enemy.setTint(0xa9c7ff)
+    else enemy.clearTint()
+    const clamp = 120
+    const targetX = Phaser.Math.Clamp(this.player.x, clamp, this.scale.width - clamp)
+    enemy.x = Phaser.Math.Linear(enemy.x, targetX, 0.025)
+
+    const charging = enemy.getData('bossCharging') === true
+    if (charging) {
+      body.setVelocity(0, this.scrollBase * 1.6)
+      const chargeEndAt = (enemy.getData('bossChargeEndAt') as number) ?? now
+      if (now >= chargeEndAt) {
+        enemy.setData('bossCharging', false)
+        enemy.setData('bossNextChargeAt', now + ((enemy.getData('bossChargeCooldown') as number) ?? 4200))
+        if (!enemy.getData('bossWeakpointUnlocked')) {
+          enemy.setData('bossShieldActive', true)
+        }
+        const baseY = (enemy.getData('bossBaseY') as number) ?? this.scale.height * 0.24
+        enemy.y = baseY
+      }
+      return
+    }
+
+    const windupUntil = enemy.getData('bossChargeWindupUntil') as number | undefined
+    if (windupUntil && now < windupUntil) {
+      body.setVelocity(0, this.scrollBase * 0.25)
+      return
+    }
+
+    const nextChargeAt = (enemy.getData('bossNextChargeAt') as number) ?? (now + 9999)
+    if (now >= nextChargeAt) {
+      enemy.setData('bossChargeWindupUntil', now + 420)
+      enemy.setData('bossCharging', true)
+      enemy.setData('bossChargeEndAt', now + ((enemy.getData('bossChargeDuration') as number) ?? 1500))
+      enemy.setData('bossShieldActive', false)
+      if (!this.reducedMotion) {
+        this.cameras.main.shake(120, 0.004)
+      }
+      return
+    }
+
+    body.setVelocity(0, this.scrollBase * 0.12)
+  }
+
+  private updateTricksterBoss(enemy: Enemy, body: Phaser.Physics.Arcade.Body, now: number) {
+    if (enemy.getData('bossTeleporting') === true) {
+      body.setVelocity(0, 0)
+      return
+    }
+    if (enemy.getData('bossSettled') !== true) return
+    const baseY = (enemy.getData('bossBaseY') as number) ?? this.scale.height * 0.24
+    enemy.y = Phaser.Math.Linear(enemy.y, baseY, 0.12)
+    const anchorX = (enemy.getData('bossLastTeleportX') as number) ?? enemy.x
+    const wobble = Math.sin(now * 0.0012) * 40
+    enemy.x = Phaser.Math.Clamp(Phaser.Math.Linear(enemy.x, anchorX + wobble, 0.12), 70, this.scale.width - 70)
+    body.setVelocity(0, this.scrollBase * 0.1)
+    const nextTeleportAt = (enemy.getData('bossNextTeleportAt') as number) ?? (now + 3200)
+    if (now >= nextTeleportAt) {
+      this.startTricksterTeleport(enemy)
+    }
+  }
+
+  private startTricksterTeleport(enemy: Enemy) {
+    if (enemy.getData('bossTeleporting') === true) return
+    if (!enemy.active) return
+    const now = this.time.now
+    enemy.setData('bossTeleporting', true)
+    enemy.setData('bossShieldActive', false)
+    enemy.setAlpha(0.18)
+    this.spawnTricksterIllusions(enemy, 2)
+    const cooldown = (enemy.getData('bossTeleportCooldown') as number) ?? 3200
+    const lanes = this.lanes
+    let targetX = Phaser.Math.Between(80, this.scale.width - 80)
+    if (lanes && lanes.getCount() > 0) {
+      const lane = Phaser.Math.Between(0, Math.max(0, lanes.getCount() - 1))
+      targetX = lanes.centerX(lane)
+    }
+    enemy.body.setVelocity(0, 0)
+    enemy.body.enable = false
+    this.time.delayedCall(380, () => {
+      if (!enemy.active) return
+      enemy.body.enable = true
+      enemy.x = targetX
+      const baseY = (enemy.getData('bossBaseY') as number) ?? this.scale.height * 0.24
+      enemy.y = baseY
+      enemy.setAlpha(1)
+      enemy.setData('bossTeleporting', false)
+      enemy.setData('bossShieldActive', true)
+      enemy.setData('bossLastTeleportX', targetX)
+      enemy.setData('bossNextTeleportAt', this.time.now + cooldown)
+    })
+    enemy.setData('bossNextTeleportAt', now + cooldown)
+  }
+
+  private spawnTricksterIllusions(enemy: Enemy, count: number) {
+    const parentId = enemy.getData('eid') as string | undefined
+    if (!parentId) return
+    const spacing = 90
+    for (let i = 0; i < count; i++) {
+      const offset = (i - (count - 1) / 2) * spacing
+      const vx = offset * 0.08
+      const vy = this.scrollBase * 0.85
+      const illusion = this.spawner.spawnAt('swarm', enemy.x + offset, enemy.y + 30, {
+        velocityX: vx,
+        velocityY: vy,
+        pattern: { kind: 'drift', velocityX: vx, speedY: vy },
+        hpOverride: 2,
+        hpMultiplier: 0.5,
+        tint: 0xff9bf3,
+        data: { bossParentId: parentId, bossIllusion: true }
+      })
+      illusion.setDepth(3)
+      this.time.delayedCall(4500, () => {
+        if (illusion.active) this.cleanupEnemy(illusion, false)
+      })
+    }
+  }
+
+  private cleanupBossMinions(parentId: string) {
+    const toCleanup: Enemy[] = []
+    const group = this.spawner.getGroup()
+    group.children.each((obj: Phaser.GameObjects.GameObject) => {
+      const enemy = obj as Enemy
+      if (!enemy.active) return true
+      if (enemy.getData('bossParentId') === parentId) {
+        toCleanup.push(enemy)
+      }
+      return true
+    })
+    for (const minion of toCleanup) {
+      this.cleanupEnemy(minion, false)
+    }
+  }
+
+  private applyBossDamageModifiers(enemy: Enemy, incomingDamage: number): number {
+    const behavior = enemy.getData('bossBehavior') as BossBehavior | undefined
+    if (behavior === 'trickster' && enemy.getData('bossTeleporting') === true) {
+      return 0
+    }
+    if (behavior === 'juggernaut') {
+      const shieldActive = enemy.getData('bossShieldActive') !== false && enemy.getData('bossWeakpointUnlocked') !== true
+      if (shieldActive) {
+        return Math.max(0.3, incomingDamage * 0.3)
+      }
+    }
+    return incomingDamage
+  }
+
+  private onBossDamaged(enemy: Enemy, damageApplied: number, hpBefore: number, hpAfter: number) {
+    if (damageApplied <= 0) return
+    const behavior = enemy.getData('bossBehavior') as BossBehavior | undefined
+    if (behavior === 'juggernaut') {
+      const maxHp = (enemy.getData('maxHp') as number) ?? hpBefore
+      if (enemy.getData('bossWeakpointUnlocked') !== true && hpAfter <= maxHp * 0.4) {
+        enemy.setData('bossWeakpointUnlocked', true)
+        enemy.setData('bossShieldActive', false)
+        enemy.clearTint()
+        if (!this.reducedMotion) {
+          this.effects.perfectShotBurst(enemy.x, enemy.y)
+        }
+      }
+    }
   }
 
   private fireBullet(judgementOverride?: BeatJudgement, deltaOverride?: number) {
@@ -1501,7 +1874,7 @@ pskin?.setThrust?.(thrustLevel)
     const maxHp = (enemy.getData('maxHp') as number) ?? Math.max(hp, 1)
     const isBoss = enemy.getData('isBoss') === true
     if (isBoss) {
-      this.hud.setBossHealth(Math.max(newHp, 0) / Math.max(maxHp, 1), enemy.getData('etype') as string)
+      this.hud.setBossHealth(Math.max(newHp, 0) / Math.max(maxHp, 1), this.resolveBossLabel(enemy))
     }
 
     this.effects.enemyHitFx(enemy.x, enemy.y, { critical: context.critical })
@@ -2237,7 +2610,7 @@ pskin?.setThrust?.(thrustLevel)
   }
 
 
-  private updateVerticalEnemies(group: Phaser.Physics.Arcade.Group, now: number) {
+  private updateVerticalEnemies(group: Phaser.Physics.Arcade.Group, now: number, delta: number) {
     const height = this.scale.height
     const margin = 100
     group.children.each((obj: Phaser.GameObjects.GameObject) => {
@@ -2322,9 +2695,7 @@ pskin?.setThrust?.(thrustLevel)
             break
           }
           case 'boss': {
-            const settleLine = height * 0.25
-            const targetSpeed = enemy.y < settleLine ? pattern.speedY : pattern.speedY * 0.08
-            body.setVelocity(0, targetSpeed)
+            this.updateBossBehavior(enemy, body, pattern, now, delta)
             break
           }
           case 'lane_hopper': {
@@ -2657,9 +3028,12 @@ pskin?.setThrust?.(thrustLevel)
     this.scoring.registerMiss(isBoss ? this.bossMissPenalty : this.missPenalty)
     this.hud.showMissFeedback(isBoss ? 'Boss Escaped!' : 'Miss!')
     if (isBoss) {
+      const bossId = enemy.getData('eid') as string | undefined
+      if (bossId) this.cleanupBossMinions(bossId)
       this.hud.setBossHealth(null)
       this.bossSpawned = false
       this.activeBoss = null
+      this.activeBossSpec = null
     }
   }
 
@@ -2694,7 +3068,12 @@ pskin?.setThrust?.(thrustLevel)
   }
 
   private onBossDown() {
+    if (this.activeBoss) {
+      const bossId = this.activeBoss.getData('eid') as string | undefined
+      if (bossId) this.cleanupBossMinions(bossId)
+    }
     this.activeBoss = null
+    this.activeBossSpec = null
     this.bossSpawned = false
     this.currentStage += 1
     this.hud.setBossHealth(null)
@@ -2709,11 +3088,17 @@ pskin?.setThrust?.(thrustLevel)
     if (this.bossSpawned || this.activeBoss) return
     const barsPerBoss = 8
     if (event.barIndex > 0 && event.barIndex % barsPerBoss === 0 && this.spawner.getGroup().countActive(true) < Math.max(4, Math.round(this.enemyCap * 0.45))) {
-      const boss = this.spawner.spawnBoss('brute', { hp: 120, speedMultiplier: 0.55 })
+      const spec = this.getNextBossSpec()
+      const boss = this.spawnBossFromSpec(spec)
       this.bossSpawned = true
       this.activeBoss = boss
-      this.hud.setBossHealth(1, boss.getData('etype') as string)
-      this.announcer.playEvent('boss')
+      this.activeBossSpec = spec
+      this.hud.setBossHealth(1, this.resolveBossLabel(boss))
+      if (spec.announcerKey) {
+        this.announcer.playAudioKey(spec.announcerKey, 0)
+      } else {
+        this.announcer.playEvent('boss')
+      }
     }
   }
 
