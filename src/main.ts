@@ -7,6 +7,7 @@ import OptionsScene from './scenes/OptionsScene'
 import EditorScene from './scenes/EditorScene'
 import LeaderboardScene from './scenes/LeaderboardScene';
 import ProfileScene from './scenes/ProfileScene';
+import LatencyCalibrationScene from './scenes/LatencyCalibrationScene'
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -25,9 +26,8 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false
     }
   },
-  scene: [BootScene, MenuScene, GameScene, ResultScene, OptionsScene, EditorScene, LeaderboardScene, ProfileScene]
+  scene: [BootScene, MenuScene, GameScene, ResultScene, OptionsScene, EditorScene, LeaderboardScene, ProfileScene, LatencyCalibrationScene]
 }
 
 // eslint-disable-next-line no-new
 new Phaser.Game(config)
-

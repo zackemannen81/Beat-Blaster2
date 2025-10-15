@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import Starfield from '../systems/Starfield'
 import { loadOptions, detectGameplayModeOverride, resolveGameplayMode } from '../systems/Options';
 import { listSavedPatterns } from '../editor/patternStore';
+import { profileService } from '../systems/ProfileService'
 
 type MenuItem =
   | { type: 'resume' }
@@ -46,6 +47,8 @@ export default class MenuScene extends Phaser.Scene {
     logo.setOrigin(0.5);
     logo.setScale(Math.min(width / 1920, height / 1080) * 0.5);
 
+    const activeProfile = profileService.getActiveProfile()
+
     this.hint = this.add.text(width / 2, height * 0.9, 'SPACE: Play   ↑/↓: Select', {
       fontFamily: 'UiFont2, sans-serif',
       fontSize: '16px',
@@ -66,6 +69,14 @@ export default class MenuScene extends Phaser.Scene {
       color: '#7ddff2'
     }).setOrigin(0.5);
     this.refreshModeLabel();
+
+    if (activeProfile) {
+      this.add.text(width / 2, height * 0.15, `Active Profile: ${activeProfile.name}`, {
+        fontFamily: 'UiFont, sans-serif',
+        fontSize: '18px',
+        color: '#a0e9ff'
+      }).setOrigin(0.5)
+    }
 
     const buttonY = height * 0.95;
 

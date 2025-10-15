@@ -15,6 +15,10 @@ import CubeSkin from '../systems/CubeSkin'
 import LaneManager, { LaneSnapPoint } from '../systems/LaneManager'
 import LanePatternController, { LaneEffect } from '../systems/LanePatternController'
 import BeatWindow, { BeatJudgement } from '../systems/BeatWindow'
+import BeatClock from '../audio/BeatClock'
+import { eventBus } from '../core/EventBus'
+import type { AbilityState } from '../ui/AbilityOverlay'
+import { latencyService } from '../systems/LatencyService'
 import { getDifficultyProfile, DifficultyProfile, DifficultyProfileId, StageTuning } from '../config/difficultyProfiles'
 import WaveDirector from '../systems/WaveDirector'
 import EnemyLifecycle from '../systems/EnemyLifecycle'
@@ -50,6 +54,11 @@ export default class GameScene extends Phaser.Scene {
   private hud!: HUD
   private scoring = new Scoring()
   private beatWindow = new BeatWindow()
+  private beatClock!: BeatClock
+  private beatClockStarted = false
+  private perfectWindowMs = 30
+  private goodWindowMs = 75
+  private abilityStates: AbilityState[] = []
   private music?: Phaser.Sound.BaseSound
   private bullets!: Phaser.Physics.Arcade.Group
   private missiles!: Phaser.Physics.Arcade.Group
@@ -515,11 +524,12 @@ export default class GameScene extends Phaser.Scene {
     this.conductor.on('bar:start', this.handleBarStart)
     
     // Set up beat listeners
-    const handleBeat = (band: 'low' | 'mid' | 'high', pulse = false) => {
+    const triggerBeat = (band: 'low' | 'mid' | 'high', pulse = false, timestamp = this.time.now) => {
       this.events.emit('beat', band)
       this.events.emit(`beat:${band}`)
+      eventBus.emit('beat:band', { band, timestamp })
       this.conductor.onBeat()
-      this.lastBeatAt = this.time.now
+      this.lastBeatAt = timestamp
       if (band === 'low') {
         this.beatCount += 1
         if (this.gameplayMode === 'vertical') this.triggerLaneHopperHop()
@@ -536,7 +546,6 @@ export default class GameScene extends Phaser.Scene {
         this.updateMirrorersOnBeat(band)
       }
       this.neon?.onBeat(band)
-      this.hud?.flashBeat(band)
       if (!this.beatStatusDetectedShown) {
         this.onBeatDetection()
       }
@@ -546,9 +555,18 @@ export default class GameScene extends Phaser.Scene {
       if (pulse && !this.timeStopActive) this.pulseEnemies()
     }
 
-    this.analyzer.on('beat:low', () => handleBeat('low', true))
-    this.analyzer.on('beat:mid', () => handleBeat('mid'))
-    this.analyzer.on('beat:high', () => handleBeat('high'))
+    this.analyzer.on('beat:low', () => {
+      const now = this.time.now
+      const estPeriod = this.analyzer.getEstimatedPeriodMs()
+      if (!this.beatClockStarted) {
+        this.beatClock.start()
+        this.beatClockStarted = true
+      }
+      this.beatClock.syncFromAnalyzer(estPeriod, now)
+      triggerBeat('low', true, now)
+    })
+    this.analyzer.on('beat:mid', () => triggerBeat('mid'))
+    this.analyzer.on('beat:high', () => triggerBeat('high'))
 
     this.sound.removeByKey('music')
     this.cache.audio.remove('music')
@@ -697,12 +715,18 @@ export default class GameScene extends Phaser.Scene {
       this.beatStatusDetected = undefined
       this.beatStatusDetectedShown = false
       this.announcer.destroy()
+      this.beatClock.stop()
     })
     this.updateDifficultyForStage()
 
     const bpm = (track && track.bpm) ? track.bpm : 120
     const interval = 60000 / bpm
     this.beatPeriodMs = interval
+    this.beatClock = new BeatClock(this, { baseBpm: bpm, latencyOffsetMs: latencyService.getOffset() })
+    eventBus.bindToScene(this, 'latency:changed', ({ offsetMs }) => {
+      this.beatClock.setLatencyOffset(offsetMs)
+    })
+    this.beatClockStarted = false
     this.scrollBase = this.computeScrollBase(bpm)
     this.beatWindow.setBpm(bpm)
     this.starfield.setBaseScroll(this.scrollBase)
@@ -723,6 +747,7 @@ export default class GameScene extends Phaser.Scene {
     this.hud.setCombo(0)
     this.hud.setBpm(bpm)
     this.hud.setLaneCount(this.lanes?.getCount() ?? this.resolveLaneCount())
+    this.initializeAbilityOverlay()
 
     this.announcer.playEvent('new_game')
 
@@ -764,35 +789,7 @@ export default class GameScene extends Phaser.Scene {
       this.effects.hitFlash(enemy)
       const skin = enemy.getData('skin') as any
       skin?.onHit?.()
-      // Get a unique ID for the enemy (use the Phaser object's ID)
-      const enemyId = enemy.getData('eid') as string
-      // enemyId bör vara unikt per fiende
-if (this.time.now - this.lastHitAt > this.comboTimeoutMs) {
-  // För sent -> reset combo
-  this.comboCount = 0
-  this.lastHitEnemyId = null
-}
-
-// Är det en ny fiende inom tidsfönstret?
-if (this.lastHitEnemyId !== enemyId) {
-  if (this.comboCount > 0) {
-    // Bara från andra fienden och uppåt
-    this.comboCount++
-    //console.log('New combo count:', this.comboCount)
-
-    // Visa text när multiplikatorn ökar
-    this.effects.showComboText(enemy.x, enemy.y, this.comboCount)
-    this.hud.setCombo(this.comboCount)
-    this.announcer.playCombo(this.comboCount)
-  } else {
-    // Första träffen bara armerar combon
-    this.comboCount = 1
-  }
-  this.lastHitEnemyId = enemyId
-}
-
-// Reset timer
-this.lastHitAt = this.time.now
+      this.registerComboHit(enemy)
   if (newHp <= 0) {
     this.sound.play('hit_enemy', { volume: this.opts.sfxVolume })
     this.scoring.addKill(etype)
@@ -941,6 +938,8 @@ this.lastHitAt = this.time.now
       this.waveDirector?.update()
     }
 
+    this.updateAbilityOverlay(delta)
+
       if (this.time.now - this.lastBeatAt < 100) { // Visa cirkeln i 100ms efter varje beat
         this.beatIndicator.setAlpha(1);
     } else {
@@ -952,6 +951,8 @@ this.lastHitAt = this.time.now
       this.comboCount = 0
       this.hud.setCombo(0)
       this.lastHitEnemyId = null
+      this.scoring.resetCombo()
+      eventBus.emit('combo:changed', { value: 0, multiplier: 1 })
     }
     
 
@@ -1555,12 +1556,12 @@ pskin?.setThrust?.(thrustLevel)
     this.effects.muzzleFlash(muzzleX, muzzleY)
 
     const ttl = this.computeBulletLifetime(direction)
+    const beatWindowMs = this.computeTimingWindowMs()
     const deltaMs = typeof deltaOverride === 'number'
       ? deltaOverride
-      : this.analyzer?.nearestBeatDeltaMs?.() ?? 999
-    const derivedJudgement = this.beatWindow.classify(deltaMs)
-    const judgement = judgementOverride ?? derivedJudgement
-    const accuracy = this.scoring.registerShot(deltaMs)
+      : this.beatClock ? this.beatClock.msSinceLastBeat() : this.analyzer?.nearestBeatDeltaMs?.() ?? 999
+    const judgement = judgementOverride ?? this.classifyTiming(deltaMs, beatWindowMs)
+    const accuracy = this.registerShotAccuracy(deltaMs)
     const bulletMetadata = this.buildBulletMetadata(accuracy, judgement)
 
     const bullet = this.spawnPlasmaBullet(direction, ttl, bulletMetadata)
@@ -1596,6 +1597,47 @@ pskin?.setThrust?.(thrustLevel)
     if (!this.hud) return
     const quality: BeatJudgement = judgementOverride ?? (accuracy === 'Perfect' ? 'perfect' : 'normal')
     this.hud.showShotFeedback(quality, accuracy)
+  }
+
+  private initializeAbilityOverlay() {
+    this.abilityStates = [
+      {
+        id: 'pulse_dash',
+        label: 'Pulse Dash',
+        cooldownMs: 5000,
+        remainingMs: 0,
+        tier: 1,
+        beatBonus: 'Perfect + distance'
+      },
+      {
+        id: 'overdrive',
+        label: 'Overdrive',
+        cooldownMs: 12000,
+        remainingMs: 0,
+        tier: 2,
+        beatBonus: 'Beat = +75% dmg'
+      }
+    ]
+    this.hud.setAbilityStates(this.abilityStates)
+    this.time.addEvent({ delay: 8000, loop: true, callback: () => this.triggerAbilityCooldown('pulse_dash') })
+    this.time.addEvent({ delay: 14000, loop: true, callback: () => this.triggerAbilityCooldown('overdrive') })
+  }
+
+  private triggerAbilityCooldown(id: string) {
+    const state = this.abilityStates.find((s) => s.id === id)
+    if (!state || state.remainingMs > 0) return
+    state.remainingMs = state.cooldownMs
+    this.hud.updateAbilityCooldown(state.id, state.remainingMs, state.cooldownMs)
+  }
+
+  private updateAbilityOverlay(delta: number) {
+    if (this.abilityStates.length === 0) return
+    this.abilityStates.forEach((state) => {
+      if (state.remainingMs > 0) {
+        state.remainingMs = Math.max(0, state.remainingMs - delta)
+        this.hud.updateAbilityCooldown(state.id, state.remainingMs, state.cooldownMs)
+      }
+    })
   }
 
   private spawnPlasmaBullet(direction: Phaser.Math.Vector2, lifetimeMs?: number, metadata?: BulletMetadata) {
@@ -1643,6 +1685,21 @@ pskin?.setThrust?.(thrustLevel)
     }
   }
 
+  private computeTimingWindowMs(): number {
+    return this.beatWindow.windowMs()
+  }
+
+  private classifyTiming(deltaMs: number, windowMs: number): BeatJudgement {
+    if (!Number.isFinite(deltaMs)) return 'normal'
+    const abs = Math.abs(deltaMs)
+    const perfectThreshold = Math.min(this.perfectWindowMs, windowMs)
+    return abs <= perfectThreshold ? 'perfect' : 'normal'
+  }
+
+  private registerShotAccuracy(deltaMs: number): AccuracyLevel {
+    return this.scoring.registerShot(deltaMs)
+  }
+
   private readBulletMetadata(bullet: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody): BulletMetadata {
     const damageRaw = Number(bullet.getData('damage'))
     const judgementRaw = bullet.getData('judgement') as BeatJudgement | undefined
@@ -1680,13 +1737,6 @@ pskin?.setThrust?.(thrustLevel)
     }
     bullet.setBlendMode(Phaser.BlendModes.SCREEN)
     bullet.disableBody(true, true)
-  }
-
-  private handleBulletWorldBounds(body: Phaser.Physics.Arcade.Body) {
-    const gameObject = body.gameObject as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody | undefined
-    if (!gameObject) return
-    if (!this.bullets.contains(gameObject)) return
-    this.disableBullet(gameObject)
   }
 
   private maybeDropPickup(x: number, y: number) {
@@ -1903,8 +1953,13 @@ pskin?.setThrust?.(thrustLevel)
 
   private registerComboHit(enemy: Enemy) {
     const enemyId = enemy.getData('eid') as string | undefined
-    if (this.time.now - this.lastHitAt > this.comboTimeoutMs) {
-      this.comboCount = 0
+    const withinBeatWindow = this.beatClock ? this.beatClock.isWithinWindow(this.goodWindowMs) : true
+    if (this.time.now - this.lastHitAt > this.comboTimeoutMs || !withinBeatWindow) {
+      if (this.comboCount > 0) {
+        this.comboCount = 0
+        this.scoring.resetCombo()
+        eventBus.emit('combo:changed', { value: 0, multiplier: 1 })
+      }
       this.lastHitEnemyId = null
     }
     if (!enemyId) {
@@ -1914,12 +1969,15 @@ pskin?.setThrust?.(thrustLevel)
     if (this.lastHitEnemyId !== enemyId) {
       if (this.comboCount > 0) {
         this.comboCount++
-        this.effects.showComboText(enemy.x, enemy.y, this.comboCount)
-        this.hud.setCombo(this.comboCount)
-        this.announcer.playCombo(this.comboCount)
       } else {
         this.comboCount = 1
       }
+      const multiplier = Math.max(1, 1 + Math.floor(this.comboCount / 10) * 0.1)
+      this.effects.showComboText(enemy.x, enemy.y, this.comboCount)
+      this.hud.setCombo(this.comboCount)
+      this.announcer.playCombo(this.comboCount)
+      this.scoring.updateCombo(this.comboCount, multiplier)
+      eventBus.emit('combo:changed', { value: this.comboCount, multiplier })
       this.lastHitEnemyId = enemyId
     }
     this.lastHitAt = this.time.now
@@ -2064,13 +2122,6 @@ pskin?.setThrust?.(thrustLevel)
     missile.setData('trailEmitter', undefined)
     missile.anims?.stop?.()
     missile.disableBody(true, true)
-  }
-
-  private handleMissileWorldBounds(body: Phaser.Physics.Arcade.Body) {
-    const gameObject = body.gameObject as MissileSprite | undefined
-    if (!gameObject) return
-    if (!this.missiles.contains(gameObject)) return
-    this.disableMissile(gameObject)
   }
 
   private handlePowerupApplied(event: PowerupEvent) {
@@ -2929,6 +2980,7 @@ pskin?.setThrust?.(thrustLevel)
 
     this.comboCount = 0;
     this.hud.setCombo(0);
+    eventBus.emit('combo:changed', { value: 0, multiplier: 1 })
     this.bumpBomb(-20);
     this.cleanupEnemy(enemy, false);
   }
@@ -3024,6 +3076,8 @@ pskin?.setThrust?.(thrustLevel)
     this.cleanupEnemy(enemy, false)
     this.comboCount = 0
     this.hud.setCombo(0)
+    this.scoring.resetCombo()
+    eventBus.emit('combo:changed', { value: 0, multiplier: 1 })
     this.lastHitEnemyId = null
     this.scoring.registerMiss(isBoss ? this.bossMissPenalty : this.missPenalty)
     this.hud.showMissFeedback(isBoss ? 'Boss Escaped!' : 'Miss!')
@@ -3048,6 +3102,8 @@ pskin?.setThrust?.(thrustLevel)
     this.playerHp = Math.max(0, this.playerHp - amount)
     this.comboCount = 0
     this.hud.setCombo(0)
+    this.scoring.resetCombo()
+    eventBus.emit('combo:changed', { value: 0, multiplier: 1 })
     this.iframesUntil = now + 800
     this.hud.setHp(this.playerHp)
     if (!this.reducedMotion) this.cameras.main.shake(150, 0.01)

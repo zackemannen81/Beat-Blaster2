@@ -27,3 +27,16 @@ Transform Beat Blaster’s prototype into a responsive, beat-synced combat exper
 - Play a fresh build each morning on keyboard and gamepad; log issues immediately.
 - Stand up with Combat Designer + Level Designer to align on upcoming beats and enemy mixes.
 - Use feature flags for unfinished systems; remove dead code after integration tests pass.
+
+### Upcoming Integration (Sprint 1)
+- Coordinate with Senior Core Engineer to wire `BeatClock` into `GameScene`, replacing direct `AudioAnalyzer` beat handlers.
+- Subscribe to `eventBus` beat events for combo logic and wave scheduling during refactor.
+
+### Recent Integration
+- GameScene now syncs low beats through BeatClock; subscribe to `eventBus` for beat-related features instead of direct analyzer hooks.
+
+### In Progress
+- Shot accuracy now uses BeatClock timing; continue with combo multiplier formulas and UI feedback updates.
+
+### Run Result Integration
+- ResultScene updates profile stats/achievements via ProfileService. Follow up to remove legacy localStorage dependencies and feed currency/XP once economy lands.

@@ -42,8 +42,8 @@ The profile system stores player information, including stats and unlocked achie
 
 ### Data Structure
 
-The `PlayerProfile` type is defined in `src/types/profile.ts`. It contains the player's `name`, `avatar`, `stats` (total kills, total score, games played), and a list of `unlockedAchievements`.
+Player profiles are managed by `ProfileService` and include display name, avatar, stats (kills, score, games played), and unlocked achievements.
 
 ### Profile System
 
-The `ProfileSystem` in `src/systems/ProfileSystem.ts` manages player profiles. It loads and saves the profile to local storage. The `updateStats` method is called at the end of each game to update the player's stats.
+Profiles are now managed by `ProfileService` (`src/systems/ProfileService.ts`), which persists data through the SaveService and tracks run stats at the end of each game.

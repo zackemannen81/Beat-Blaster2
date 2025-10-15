@@ -25,7 +25,7 @@ export default class OptionsScene extends Phaser.Scene {
 
     const baseY = 0.32
     const stepY = 0.055
-    const rowCount = 15
+    const rowCount = 16
     this.entries = Array.from({ length: rowCount }, (_, i) =>
       this.add.text(width / 2, height * (baseY + stepY * i), '', { fontFamily: 'UiFont', fontSize: '18px' }).setOrigin(0.5)
     )
@@ -37,7 +37,7 @@ export default class OptionsScene extends Phaser.Scene {
     k.on('keydown-LEFT', () => { this.adjust(-1) })
     k.on('keydown-RIGHT', () => { this.adjust(1) })
     k.once('keydown-ESC', () => this.close())
-    k.once('keydown-ENTER', () => this.close())
+    k.on('keydown-ENTER', () => this.triggerSelection())
   }
 
   private render() {
@@ -62,6 +62,7 @@ export default class OptionsScene extends Phaser.Scene {
       `Metronome: ${this.opts.metronome ? 'On' : 'Off'}`,
       `High Contrast: ${this.opts.highContrast ? 'On' : 'Off'}`,
       `Reduced Motion: ${this.opts.reducedMotion ? 'On' : 'Off'}`,
+      `Calibrate Latency…`,
       `Input Offset: ${io} ms`,
       `Fire Mode: ${fm === 'click' ? 'Click' : fm === 'hold_quantized' ? 'Hold (Quantized)' : 'Hold (Raw)'}`,
       `Gameplay Mode: ${modeLabel}${overrideSuffix}`,
@@ -89,17 +90,21 @@ export default class OptionsScene extends Phaser.Scene {
         break
       }
       case 5: {
+        // Calibration handled via triggerSelection
+        break
+      }
+      case 6: {
         const prev = this.opts.inputOffsetMs[trackId] ?? 0
         this.opts.inputOffsetMs[trackId] = Phaser.Math.Clamp(prev + step * 5, -200, 200)
         break
       }
-      case 6: {
+      case 7: {
         const order: Options['fireMode'][] = ['click', 'hold_quantized', 'hold_raw']
         const idx = order.indexOf(this.opts.fireMode)
         this.opts.fireMode = order[(idx + (dir > 0 ? 1 : order.length - 1)) % order.length]
         break
       }
-      case 7: {
+      case 8: {
         const override = detectGameplayModeOverride()
         if (override) break
         const order: Options['gameplayMode'][] = ['omni', 'vertical']
@@ -107,33 +112,33 @@ export default class OptionsScene extends Phaser.Scene {
         this.opts.gameplayMode = order[(idx + (dir > 0 ? 1 : order.length - 1)) % order.length]
         break
       }
-      case 8: {
+      case 9: {
         const order: Options['crosshairMode'][] = ['pointer', 'fixed', 'pad-relative']
         const idx = order.indexOf(this.opts.crosshairMode)
         this.opts.crosshairMode = order[(idx + (dir > 0 ? 1 : order.length - 1)) % order.length]
         break
       }
-      case 9: {
+      case 10: {
         this.opts.unlockMouseAim = !this.opts.unlockMouseAim
         break
       }
-      case 10: {
+      case 11: {
         this.opts.mouseNavigation = !this.opts.mouseNavigation
         break
       }
-      case 11: {
+      case 12: {
         this.opts.verticalSafetyBand = !this.opts.verticalSafetyBand
         break
       }
-      case 12: {
+      case 13: {
         this.opts.allowFallbackWaves = !this.opts.allowFallbackWaves
         break
       }
-      case 13: {
+      case 14: {
         this.opts.gamepadDeadzone = Phaser.Math.Clamp(this.opts.gamepadDeadzone + step * 0.05, 0, 0.6)
         break
       }
-      case 14: {
+      case 15: {
         this.opts.gamepadSensitivity = Phaser.Math.Clamp(this.opts.gamepadSensitivity + step * 0.1, 0.5, 2)
         break
       }
@@ -151,5 +156,15 @@ export default class OptionsScene extends Phaser.Scene {
     this.scene.get('GameScene')?.cameras.main.setBackgroundColor(color)
     this.scene.stop()
     this.scene.resume(this.originScene)
+  }
+
+  private triggerSelection() {
+    if (this.cursor === 5) {
+      this.sound.play('ui_select', { volume: this.opts.sfxVolume })
+      this.scene.pause()
+      this.scene.launch('LatencyCalibrationScene', { returnScene: this.scene.key })
+      return
+    }
+    this.close()
   }
 }

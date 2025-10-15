@@ -3,6 +3,7 @@ import Phaser from 'phaser'
 export type BeatBand = 'low' | 'mid' | 'high'
 
 export default class AudioAnalyzer extends Phaser.Events.EventEmitter {
+  // TODO(CORE-007): Emit analyzer timing data to BeatClock instead of driving beat logic directly.
   private scene: Phaser.Scene
   private analyser!: AnalyserNode
   private freqData!: Float32Array

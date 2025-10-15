@@ -2,7 +2,7 @@ import Phaser from 'phaser'
 import { addScore, loadBoard } from '../net/localLeaderboard';
 import { submitScore } from '../net/onlineLeaderboard';
 import { AchievementSystem } from '../systems/AchievementSystem';
-import { ProfileSystem } from '../systems/ProfileSystem';
+import { profileService } from '../systems/ProfileService';
 
 export default class ResultScene extends Phaser.Scene {
   constructor() {
@@ -20,17 +20,18 @@ export default class ResultScene extends Phaser.Scene {
 
     const accuracy = typeof data.accuracy === 'number' ? data.accuracy : 0
     const score = data.score ?? 0
+    const profile = profileService.getActiveProfile()
 
     // Check for achievements and update profile
-    const achievementSystem = new AchievementSystem()
+    const achievementSystem = new AchievementSystem(profile?.achievements)
     achievementSystem.checkScoreAchievement(score)
     achievementSystem.checkAccuracyAchievement(accuracy)
 
     const kills = data.kills ?? 0
-    const profileSystem = new ProfileSystem()
-    profileSystem.updateStats(score, kills)
-    const unlocked = JSON.parse(localStorage.getItem('unlocked_achievements') || '[]')
-    profileSystem.syncAchievements(unlocked)
+    profileService.recordRunStats({ score, kills, accuracy })
+    if (profile) {
+      profile.achievements = achievementSystem.getUnlockedAchievements()
+    }
 
     const accuracyText = `${accuracy.toFixed(1)}%`
     this.add.text(
@@ -43,8 +44,12 @@ export default class ResultScene extends Phaser.Scene {
     // Save to local leaderboard (prompt name once)
     const trackId = (this.registry.get('selectedTrackId') as string) || 'unknown'
     const difficultyId = (this.registry.get('selectedDifficultyId') as string) || 'normal'
-    const name = window.prompt('Enter your name for the leaderboard:', localStorage.getItem('bb_name') || 'AAA') || 'Anon'
-    localStorage.setItem('bb_name', name)
+    const name = window.prompt('Enter your name for the leaderboard:', profile?.name ?? 'AAA') || 'Anon'
+    if (profile && name !== profile.name) {
+      profileService.renameProfile(profile.id, name)
+    } else {
+      localStorage.setItem('bb_name', name)
+    }
     addScore({ name, trackId, score, date: Date.now() })
     submitScore(trackId, difficultyId, name, score);
 
