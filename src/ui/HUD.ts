@@ -1,8 +1,11 @@
 import Phaser from 'phaser'
 import Powerups, { PowerupEvent, PowerupType } from '../systems/Powerups'
 import { BeatJudgement } from '../systems/BeatWindow'
+import { eventBus } from '../core/EventBus'
 import { AccuracyLevel } from '../systems/Scoring'
 import { Achievement } from '../systems/AchievementSystem'
+import RhythmRing from './RhythmRing'
+import AbilityOverlay, { type AbilityState } from './AbilityOverlay'
 
 type PowerupSlot = {
   container: Phaser.GameObjects.Container
@@ -53,6 +56,7 @@ export default class HUD {
     time_stop: 0x9c6bff
   }
   private reducedMotion = false
+  private colorblindMode = false
   private missResetTimer?: Phaser.Time.TimerEvent
   private stageValue = 1
   private difficultyLabel = ''
@@ -65,6 +69,11 @@ export default class HUD {
   private beatVisualizer!: Phaser.GameObjects.Graphics
   private beatLevels = { low: 0, mid: 0, high: 0 }
   private achievementText!: Phaser.GameObjects.Text
+  private rhythmRing?: RhythmRing
+  private beatCoinText!: Phaser.GameObjects.Text
+  private beatCoins = 0
+  private beatWindowMs = 600
+  private abilityOverlay?: AbilityOverlay
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene
@@ -105,6 +114,29 @@ export default class HUD {
 
     this.bpmText = this.scene.add.text(width - 160, 34, 'BPM: 0', { fontFamily: 'UiFont, sans-serif', fontSize: '14px', color: '#9ad2ff' })
     this.laneText = this.scene.add.text(width - 160, 52, 'Lanes: 0', { fontFamily: 'UiFont, sans-serif', fontSize: '14px', color: '#9ad2ff' })
+    this.beatCoinText = this.scene.add.text(width - 160, 70, 'BeatCoins: 0', { fontFamily: 'UiFont, sans-serif', fontSize: '14px', color: '#ffe27a' })
+
+    this.rhythmRing = new RhythmRing(this.scene, { reducedMotion: this.reducedMotion, colorblindMode: this.colorblindMode })
+    this.rhythmRing.create(width / 2, height - 110)
+    this.abilityOverlay = new AbilityOverlay(this.scene, { x: width - 120, y: height - 110 })
+
+    eventBus.bindToScene(this.scene, 'beat:window', ({ windowMs }) => {
+      this.beatWindowMs = windowMs
+      this.rhythmRing?.updateWindow(windowMs)
+    })
+
+    eventBus.bindToScene(this.scene, 'beat:tick', () => {
+      this.rhythmRing?.handleBeat(this.beatWindowMs)
+      this.abilityOverlay?.flashBeat()
+    })
+
+    eventBus.bindToScene(this.scene, 'beat:band', ({ band }) => {
+      this.flashBeat(band)
+    })
+
+    eventBus.bindToScene(this.scene, 'currency:changed', ({ total }) => {
+      this.setBeatCoins(total)
+    })
 
     this.bossContainer = this.scene.add.container(width / 2, 80).setVisible(false).setDepth(40)
     const bossBg = this.scene.add.rectangle(0, 0, 240, 18, 0x000000, 0.45).setOrigin(0.5)
@@ -133,6 +165,8 @@ export default class HUD {
     this.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scene.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this)
       window.removeEventListener('achievement_unlocked', this.handleAchievementUnlocked)
+      this.rhythmRing?.destroy()
+      this.abilityOverlay?.destroy()
     })
 
     this.achievementText = this.scene.add.text(width / 2, height - 50, '', {
@@ -196,6 +230,14 @@ export default class HUD {
 
   setBombCharge(pct: number) {
     if (this.bombBarFill) this.bombBarFill.width = 120 * Phaser.Math.Clamp(pct, 0, 1)
+    this.abilityOverlay?.setBombCharge(pct)
+  }
+
+  setBeatCoins(total: number) {
+    this.beatCoins = Math.max(0, Math.floor(total))
+    if (this.beatCoinText) {
+      this.beatCoinText.setText(`BeatCoins: ${this.beatCoins}`)
+    }
   }
 
   setCombo(_count: number) {
@@ -258,6 +300,7 @@ export default class HUD {
       duration,
       ease: 'Sine.easeOut'
     })
+    this.rhythmRing?.showJudgement(quality, accuracy)
   }
 
   setStage(stage: number) {
@@ -305,11 +348,26 @@ export default class HUD {
     if (flag) {
       this.comboText.setAlpha(1)
     }
+    this.rhythmRing?.setReducedMotion(flag)
+    this.abilityOverlay?.setReducedMotion(flag)
   }
 
   setDifficultyLabel(label: string) {
     this.difficultyLabel = label
     this.setStage(this.stageValue)
+  }
+
+  setColorblindMode(flag: boolean) {
+    this.colorblindMode = flag
+    this.rhythmRing?.setColorblindMode(flag)
+  }
+
+  setAbilityStates(states: AbilityState[]): void {
+    this.abilityOverlay?.setAbilityStates(states)
+  }
+
+  updateAbilityCooldown(id: string, remainingMs: number, cooldownMs?: number): void {
+    this.abilityOverlay?.updateAbilityCooldown(id, remainingMs, cooldownMs)
   }
 
   setCrosshairMode(mode: 'pointer' | 'fixed' | 'pad-relative') {
@@ -480,7 +538,10 @@ export default class HUD {
     this.missText.setPosition(width / 2, height * 0.45)
     this.bpmText?.setPosition(width - 160, 34)
     this.laneText?.setPosition(width - 160, 52)
+    this.beatCoinText?.setPosition(width - 160, 70)
     this.shotFeedback?.setPosition(width / 2, height * 0.78)
+    this.rhythmRing?.setPosition(width / 2, height - 110)
+    this.abilityOverlay?.setPosition(width - 120, height - 110)
     this.layoutPowerupSlots()
   }
   private drawSideOrnaments(width: number, height: number) {

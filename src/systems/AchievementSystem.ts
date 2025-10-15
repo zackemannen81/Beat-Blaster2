@@ -16,10 +16,14 @@ export class AchievementSystem {
   private achievements: Achievement[];
   private unlockedAchievements: Set<string>;
 
-  constructor() {
+  constructor(initialUnlocked?: string[]) {
     this.achievements = achievements;
-    const saved = localStorage.getItem('unlocked_achievements');
-    this.unlockedAchievements = saved ? new Set(JSON.parse(saved)) : new Set();
+    if (Array.isArray(initialUnlocked)) {
+      this.unlockedAchievements = new Set(initialUnlocked)
+    } else {
+      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('unlocked_achievements') : null
+      this.unlockedAchievements = saved ? new Set(JSON.parse(saved)) : new Set()
+    }
   }
 
   public isUnlocked(achievementId: string): boolean {
@@ -62,5 +66,9 @@ export class AchievementSystem {
         this.unlockAchievement(achievement.id);
       }
     });
+  }
+
+  public getUnlockedAchievements(): string[] {
+    return Array.from(this.unlockedAchievements)
   }
 }

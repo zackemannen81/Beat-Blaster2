@@ -27,3 +27,22 @@ Own the rhythm-centric backbone of Beat Blaster v1.0. Deliver the event bus, Bea
 - Systems/tools stand-up with Tools Engineer + QA daily.
 - Bi-weekly review with Producer/PM to de-risk upcoming dependencies.
 - Async handoffs via pull-request templates including task IDs and timing metrics.
+
+## Current Focus (Sprint 1)
+- Execute CORE-006 and CORE-007 per `docs/design/phaseA_core_systems.md`.
+- Coordinate scaffolding hand-off with Gameplay & UI engineers before refactoring existing beat hooks.
+
+### Updates
+- Scaffolding for EventBus and BeatClock committed (placeholders in `src/core/EventBus.ts`, `src/audio/BeatClock.ts`).
+- Marked legacy beat hookups with TODOs to ease upcoming refactor.
+- Next step: implement pub/sub mechanics and deterministic beat scheduling.
+
+### Latency Service
+- Implemented CORE-008 LatencyService; coordinate with ProfileService owners to persist offsets when CORE-010 lands.
+
+### Save Service
+- Implemented CORE-010 SaveService storing profiles with versioning/backups and wired ProfileService autosaves.
+- Coordinate with UI/UX on exposing profile management controls.
+
+### Profile Persistence
+- ProfileService now auto-saves via SaveService and tracks run stats/achievements. Next: integrate manual save triggers and expose persistence status in UI.

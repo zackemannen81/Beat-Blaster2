@@ -24,7 +24,7 @@
   {
     "id": "track_02",
     "name": "Neon Heartbeat (Normal)",
-    "artist": "Mr.White",
+    "artist": "Mr.White81",
     "inputOffsetMs": 0,
     "lengthSec": 215,
     "fileOgg": "",
@@ -45,24 +45,13 @@
   },
   {
     "id": "track_04",
-    "name": "Electric heartbeat (Easy)",
-    "artist": "Alex Harmony",
+    "name": "69413__kara__tb303_22 (Easy)",
+    "artist": "Mr.White81",
     "inputOffsetMs": 0,
-    "lengthSec": 128,
+    "lengthSec": 273,
     "fileOgg": "",
-    "fileMp3": "src/assets/audio/tracks/track_04.mp3",
+    "fileMp3": "src/assets/audio/tracks/69413__kara__tb303_22.wav",
     "difficultyProfileId": "easy",
-    "hash": "91913fcb63140356966ac881688e6ae6170bc333"
-  },
-  {
-    "id": "track_05",
-    "name": "Electric pulse (EXTREME)",
-    "artist": "Alex Harmony",
-    "inputOffsetMs": 0,
-    "lengthSec": 128,
-    "fileOgg": "",
-    "fileMp3": "src/assets/audio/tracks/track_05.mp3",
-    "difficultyProfileId": "hard",
     "hash": "91913fcb63140356966ac881688e6ae6170bc333"
   },
   {

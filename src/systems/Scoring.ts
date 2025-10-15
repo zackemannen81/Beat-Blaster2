@@ -6,8 +6,6 @@ export default class Scoring {
   combo = 0
   perfectMs = 60
   goodMs = 120
-  comboStep = 0.1
-  comboMax = 8
   shots = 0
   perfect = 0
   good = 0
@@ -20,21 +18,12 @@ export default class Scoring {
     if (ad <= this.perfectMs) acc = 'Perfect'
     else if (ad <= this.goodMs) acc = 'Good'
 
-    switch (acc) {
-      case 'Perfect':
-        this.multiplier = Math.min(this.comboMax, this.multiplier + this.comboStep)
-        this.combo++
-        this.score += Math.round(100 * this.multiplier)
-        this.perfect++
-        break
-      case 'Good':
-        this.score += Math.round(50 * this.multiplier)
-        this.good++
-        break
-      case 'Offbeat':
-        this.combo = 0
-        this.multiplier = 1
-        break
+    if (acc === 'Perfect') {
+      this.score += Math.round(100 * this.multiplier)
+      this.perfect++
+    } else if (acc === 'Good') {
+      this.score += Math.round(50 * this.multiplier)
+      this.good++
     }
     this.shots++
     return acc
@@ -88,8 +77,16 @@ export default class Scoring {
 
   registerMiss(penalty = 50) {
     this.misses++
-    this.combo = 0
-    this.multiplier = 1
+    this.resetCombo()
     this.score = Math.max(0, this.score - penalty)
+  }
+
+  updateCombo(comboCount: number, multiplier: number) {
+    this.combo = comboCount
+    this.multiplier = Math.max(1, multiplier)
+  }
+
+  resetCombo() {
+    this.updateCombo(0, 1)
   }
 }

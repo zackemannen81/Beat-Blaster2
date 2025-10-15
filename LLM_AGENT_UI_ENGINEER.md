@@ -28,3 +28,15 @@ Deliver a reactive, accessible UI suite—from HUD to menus—that pulses with t
 - Kick off with design review stand-up; confirm assets and copy before implementation.
 - Test UI in keyboard, mouse, and gamepad modes every day; log control inconsistencies.
 - Update `docs/dev-journal.md` with release notes and known UX gaps tied to task IDs.
+
+### Heads-Up
+- EventBus and BeatClock services are live; plan HUD v2 (UI-004) to consume `beat:tick` via EventBus once `GameScene` integration lands.
+
+### Recent Changes
+- HUD now subscribes to `beat:band` via EventBus; GameScene no longer calls `flashBeat` directly. Use this pattern for upcoming UI-004 work.
+
+### Profile UI Work
+- ProfileScene now consumed ProfileService data; added create/rename/delete controls and rhythm-friendly layout. Coordinate with design to polish avatars and list styling.
+
+### Latency Wizard
+- Implemented LatencyCalibrationScene (UI-011); OptionsScene now exposes "Calibrate Latency" entry. Follow up with design polish and confirmation messaging.
