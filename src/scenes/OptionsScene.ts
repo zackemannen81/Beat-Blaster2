@@ -1,5 +1,9 @@
 import Phaser from 'phaser'
 import { loadOptions, saveOptions, Options, detectGameplayModeOverride, resolveGameplayMode } from '../systems/Options'
+import { profileService } from '../systems/ProfileService'
+import { eventBus } from '../core/EventBus'
+import { abilityDefinitions, DEFAULT_ABILITY_IDS } from '../config/abilities'
+import type { AbilityDefinition } from '../types/ability'
 
 type OptionsSceneData = {
   from?: string
@@ -11,6 +15,14 @@ export default class OptionsScene extends Phaser.Scene {
   private entries!: Phaser.GameObjects.Text[]
   private title!: Phaser.GameObjects.Text
   private originScene: string = 'MenuScene'
+  private saveStatusText!: Phaser.GameObjects.Text
+  private saveStatus: { state: 'idle' | 'pending'; reason: 'auto' | 'manual'; savedAt?: number } = {
+    state: 'idle',
+    reason: 'auto'
+  }
+  private manualSaveIndex = 0
+  private abilityPool: AbilityDefinition[] = Object.values(abilityDefinitions)
+  private abilitySelections: string[] = []
 
   constructor() {
     super('OptionsScene')
@@ -25,11 +37,21 @@ export default class OptionsScene extends Phaser.Scene {
 
     const baseY = 0.32
     const stepY = 0.055
-    const rowCount = 16
+    const rowCount = 17
     this.entries = Array.from({ length: rowCount }, (_, i) =>
       this.add.text(width / 2, height * (baseY + stepY * i), '', { fontFamily: 'UiFont', fontSize: '18px' }).setOrigin(0.5)
     )
+    this.syncAbilitySelections()
     this.render()
+
+    this.saveStatusText = this.add.text(width / 2, height * 0.26, '', {
+      fontFamily: 'UiFont',
+      fontSize: '16px',
+      color: '#7ddff2'
+    }).setOrigin(0.5)
+    this.updateSaveStatusText()
+
+    this.syncAbilitySelections()
 
     const k = this.input.keyboard!
     k.on('keydown-UP', () => { this.cursor = (this.cursor - 1 + this.entries.length) % this.entries.length; this.sound.play('ui_move', { volume: this.opts.sfxVolume }); this.render() })
@@ -38,11 +60,34 @@ export default class OptionsScene extends Phaser.Scene {
     k.on('keydown-RIGHT', () => { this.adjust(1) })
     k.once('keydown-ESC', () => this.close())
     k.on('keydown-ENTER', () => this.triggerSelection())
+
+    this.events.on(Phaser.Scenes.Events.WAKE, this.handleWake, this)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.events.off(Phaser.Scenes.Events.WAKE, this.handleWake, this)
+    })
+
+    eventBus.bindToScene(this, 'profile:save:pending', ({ reason }) => {
+      this.saveStatus = { state: 'pending', reason }
+      this.updateSaveStatusText()
+      this.render()
+    })
+
+    eventBus.bindToScene(this, 'profile:save:completed', ({ reason, savedAt }) => {
+      this.saveStatus = { state: 'idle', reason, savedAt }
+      this.updateSaveStatusText()
+      this.render()
+    })
+
+    eventBus.bindToScene(this, 'profile:changed', () => {
+      this.syncAbilitySelections()
+      this.render()
+    })
   }
 
   private render() {
     const trackId = (this.registry.get('selectedTrackId') as string) || 'default'
-    const io = this.opts.inputOffsetMs[trackId] ?? 0
+    const profile = profileService.getActiveProfile()
+    const io = profile?.settings.inputOffsetMs ?? this.opts.inputOffsetMs[trackId] ?? 0
     const fm = this.opts.fireMode
     const override = detectGameplayModeOverride()
     const activeMode = override ? override.mode : resolveGameplayMode(this.opts.gameplayMode)
@@ -55,6 +100,8 @@ export default class OptionsScene extends Phaser.Scene {
         : this.opts.crosshairMode === 'fixed'
           ? 'Fixed'
           : 'Pad-Relative'
+
+    this.syncAbilitySelections()
 
     const rows = [
       `Music Volume: ${(this.opts.musicVolume * 100) | 0}%`,
@@ -72,9 +119,14 @@ export default class OptionsScene extends Phaser.Scene {
       `Vertical Safety Band: ${this.opts.verticalSafetyBand ? 'On' : 'Off'}`,
       `Fallback Waves: ${this.opts.allowFallbackWaves ? 'On' : 'Off'}`,
       `Gamepad Deadzone: ${(this.opts.gamepadDeadzone * 100).toFixed(0)}%`,
-      `Gamepad Sensitivity: ${this.opts.gamepadSensitivity.toFixed(2)}x`
+      `Gamepad Sensitivity: ${this.opts.gamepadSensitivity.toFixed(2)}x`,
+      this.getAbilityRowLabel(0),
+      this.getAbilityRowLabel(1),
+      this.getManualSaveRowLabel()
     ]
-    this.entries.forEach((t, i) => t.setText(`${i === this.cursor ? '▶ ' : '  '}${rows[i]}`).setColor(i === this.cursor ? '#00e5ff' : '#ffffff'))
+    this.manualSaveIndex = rows.length - 1
+    this.entries.forEach((t, i) => t.setText(`${i === this.cursor ? '▶ ' : '  '}${rows[i] ?? ''}`).setColor(i === this.cursor ? '#00e5ff' : '#ffffff'))
+    this.updateSaveStatusText()
   }
 
   private adjust(dir: number) {
@@ -94,8 +146,14 @@ export default class OptionsScene extends Phaser.Scene {
         break
       }
       case 6: {
-        const prev = this.opts.inputOffsetMs[trackId] ?? 0
-        this.opts.inputOffsetMs[trackId] = Phaser.Math.Clamp(prev + step * 5, -200, 200)
+        const profile = profileService.getActiveProfile()
+        if (profile) {
+          const next = Phaser.Math.Clamp((profile.settings.inputOffsetMs ?? 0) + step * 5, -200, 200)
+          profileService.updateSettings(profile.id, { inputOffsetMs: next })
+        } else {
+          const prev = this.opts.inputOffsetMs[trackId] ?? 0
+          this.opts.inputOffsetMs[trackId] = Phaser.Math.Clamp(prev + step * 5, -200, 200)
+        }
         break
       }
       case 7: {
@@ -142,6 +200,11 @@ export default class OptionsScene extends Phaser.Scene {
         this.opts.gamepadSensitivity = Phaser.Math.Clamp(this.opts.gamepadSensitivity + step * 0.1, 0.5, 2)
         break
       }
+      case 16:
+      case 17: {
+        this.adjustAbility(this.cursor - 16, dir)
+        break
+      }
     }
     this.sound.play('ui_move', { volume: this.opts.sfxVolume })
     this.render()
@@ -165,6 +228,114 @@ export default class OptionsScene extends Phaser.Scene {
       this.scene.launch('LatencyCalibrationScene', { returnScene: this.scene.key })
       return
     }
+    if (this.cursor === this.manualSaveIndex) {
+      this.sound.play('ui_select', { volume: this.opts.sfxVolume })
+      void profileService.saveNow()
+      return
+    }
     this.close()
+  }
+
+  private handleWake = () => {
+    this.opts = loadOptions()
+    this.render()
+  }
+
+  private getManualSaveRowLabel(): string {
+    if (this.saveStatus.state === 'pending') {
+      const reason = this.saveStatus.reason === 'manual' ? 'manual' : 'auto'
+      return `Save Profile Now — Saving (${reason})…`
+    }
+    if (this.saveStatus.savedAt) {
+      const timestamp = new Date(this.saveStatus.savedAt).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+      const reason = this.saveStatus.reason === 'manual' ? 'manual' : 'auto'
+      return `Save Profile Now — Saved ${timestamp} (${reason})`
+    }
+    return 'Save Profile Now'
+  }
+
+  private lookupAbility(id: string): AbilityDefinition | undefined {
+    return abilityDefinitions[id]
+  }
+
+  private syncAbilitySelections(): void {
+    const profile = profileService.getActiveProfile()
+    if (!profile) {
+      this.abilitySelections = [...DEFAULT_ABILITY_IDS]
+      return
+    }
+    const selections = profile.abilities && profile.abilities.length > 0 ? [...profile.abilities] : [...DEFAULT_ABILITY_IDS]
+    while (selections.length < 2 && this.abilityPool.length > selections.length) {
+      const candidate = this.abilityPool[selections.length]?.id
+      if (candidate) selections.push(candidate)
+    }
+    this.abilitySelections = selections.slice(0, 2)
+  }
+
+  private getAbilityRowLabel(index: number): string {
+    const def = this.lookupAbility(this.abilitySelections[index])
+    if (!def) return index === 0 ? 'Primary Ability: —' : 'Secondary Ability: —'
+    const inputHint = def.inputHint ? ` (${def.inputHint})` : ''
+    const slotLabel = index === 0 ? 'Primary Ability' : 'Secondary Ability'
+    const bonus = def.beatBonus ? ` — ${def.beatBonus}` : ''
+    return `${slotLabel}: ${def.label}${inputHint}${bonus}`
+  }
+
+  private adjustAbility(index: number, direction: number): void {
+    if (this.abilityPool.length === 0) return
+    if (!this.abilitySelections[index]) {
+      this.abilitySelections[index] = this.abilityPool[0].id
+    }
+    if (this.abilityPool.length === 1) {
+      this.abilitySelections[index] = this.abilityPool[0].id
+      this.commitAbilities()
+      return
+    }
+    const otherIndex = index === 0 ? 1 : 0
+    const usedByOther = this.abilitySelections[otherIndex]
+    const currentId = this.abilitySelections[index]
+    let idx = this.abilityPool.findIndex((def) => def.id === currentId)
+    if (idx === -1) idx = 0
+    let attempts = 0
+    while (attempts < this.abilityPool.length) {
+      idx = (idx + direction + this.abilityPool.length) % this.abilityPool.length
+      const candidate = this.abilityPool[idx].id
+      attempts += 1
+      if (candidate === currentId) continue
+      if (candidate === usedByOther) continue
+      this.abilitySelections[index] = candidate
+      this.commitAbilities()
+      return
+    }
+  }
+
+  private commitAbilities(): void {
+    const profile = profileService.getActiveProfile()
+    if (!profile) return
+    profileService.updateAbilities(profile.id, this.abilitySelections)
+  }
+
+  private updateSaveStatusText(): void {
+    if (!this.saveStatusText) return
+    if (this.saveStatus.state === 'pending') {
+      const reasonLabel = this.saveStatus.reason === 'manual' ? 'Manual save' : 'Autosave'
+      this.saveStatusText.setText(`${reasonLabel} in progress…`)
+      return
+    }
+    if (this.saveStatus.savedAt) {
+      const timestamp = new Date(this.saveStatus.savedAt).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+      const reasonLabel = this.saveStatus.reason === 'manual' ? 'Manual save' : 'Autosave'
+      this.saveStatusText.setText(`${reasonLabel} completed at ${timestamp}`)
+      return
+    }
+    this.saveStatusText.setText('Profile changes auto-save in the background')
   }
 }

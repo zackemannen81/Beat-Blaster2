@@ -3,6 +3,7 @@ import Starfield from '../systems/Starfield'
 import { loadOptions, detectGameplayModeOverride, resolveGameplayMode } from '../systems/Options';
 import { listSavedPatterns } from '../editor/patternStore';
 import { profileService } from '../systems/ProfileService'
+import { eventBus } from '../core/EventBus'
 
 type MenuItem =
   | { type: 'resume' }
@@ -26,6 +27,10 @@ export default class MenuScene extends Phaser.Scene {
   private pausedBanner?: Phaser.GameObjects.Text;
   private resumeAvailable = false;
   private modeLabel!: Phaser.GameObjects.Text;
+  private profileNameText?: Phaser.GameObjects.Text;
+  private profileSaveStatusText?: Phaser.GameObjects.Text;
+  private profileSwitchLeft?: Phaser.GameObjects.Text;
+  private profileSwitchRight?: Phaser.GameObjects.Text;
 
   constructor() {
     super('MenuScene');
@@ -71,11 +76,32 @@ export default class MenuScene extends Phaser.Scene {
     this.refreshModeLabel();
 
     if (activeProfile) {
-      this.add.text(width / 2, height * 0.15, `Active Profile: ${activeProfile.name}`, {
+      const profileY = height * 0.15
+      this.profileSwitchLeft = this.add.text(width / 2 - 170, profileY, '〈', {
+        fontFamily: 'UiFont, sans-serif',
+        fontSize: '22px',
+        color: '#5ea8c9'
+      }).setOrigin(0.5)
+      this.profileSwitchRight = this.add.text(width / 2 + 170, profileY, '〉', {
+        fontFamily: 'UiFont, sans-serif',
+        fontSize: '22px',
+        color: '#5ea8c9'
+      }).setOrigin(0.5)
+
+      this.profileNameText = this.add.text(width / 2, profileY, '', {
         fontFamily: 'UiFont, sans-serif',
         fontSize: '18px',
         color: '#a0e9ff'
       }).setOrigin(0.5)
+
+      this.profileSaveStatusText = this.add.text(width / 2, profileY + 26, '', {
+        fontFamily: 'UiFont, sans-serif',
+        fontSize: '12px',
+        color: '#7ddff2'
+      }).setOrigin(0.5).setAlpha(0.6)
+
+      this.setupProfileSwitchInteractions()
+      this.updateProfileHeader()
     }
 
     const buttonY = height * 0.95;
@@ -244,6 +270,30 @@ export default class MenuScene extends Phaser.Scene {
 
     this.events.on(Phaser.Scenes.Events.RESUME, this.refreshModeLabel, this)
 
+    const keys = this.input.keyboard!
+    const handleBracketLeft = () => this.cycleProfile(-1)
+    const handleBracketRight = () => this.cycleProfile(1)
+    keys.on('keydown-LEFT_BRACKET', handleBracketLeft)
+    keys.on('keydown-RIGHT_BRACKET', handleBracketRight)
+
+    eventBus.bindToScene(this, 'profile:changed', () => {
+      this.updateProfileHeader()
+    })
+
+    eventBus.bindToScene(this, 'profile:save:pending', () => {
+      this.setProfileSaveStatus('Saving profile…')
+    })
+
+    eventBus.bindToScene(this, 'profile:save:completed', ({ savedAt }) => {
+      const timestamp = new Date(savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      this.setProfileSaveStatus(`Saved at ${timestamp}`)
+    })
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      keys.off('keydown-LEFT_BRACKET', handleBracketLeft)
+      keys.off('keydown-RIGHT_BRACKET', handleBracketRight)
+    })
+
   }
 
   update(_time: number, delta: number) {
@@ -293,15 +343,81 @@ export default class MenuScene extends Phaser.Scene {
     });
   }
 
-    shutdown() {
-      this.registry.set('menuIndex', this.index);
-    }
-  
-    private refreshModeLabel = () => {    const opts = loadOptions()
+  shutdown() {
+    this.registry.set('menuIndex', this.index);
+  }
+
+  private refreshModeLabel = () => {    const opts = loadOptions()
     const override = detectGameplayModeOverride()
     const mode = override ? override.mode : resolveGameplayMode(opts.gameplayMode)
     const friendly = mode === 'vertical' ? 'Vertical Scroll' : 'Omni Scroll'
     const suffix = override ? ' (Override)' : ''
     this.modeLabel.setText(`Mode: ${friendly}${suffix}`)
+  }
+
+  private setupProfileSwitchInteractions() {
+    const entries: Array<{ target?: Phaser.GameObjects.Text; direction: number }> = [
+      { target: this.profileSwitchLeft, direction: -1 },
+      { target: this.profileSwitchRight, direction: 1 }
+    ]
+    entries.forEach(({ target, direction }) => {
+      if (!target) return
+      target.setInteractive({ useHandCursor: true })
+      target.on('pointerdown', () => this.cycleProfile(direction))
+      target.on('pointerover', () => target.setColor('#00e5ff'))
+      target.on('pointerout', () => target.setColor('#5ea8c9'))
+    })
+    this.updateProfileSwitchVisibility()
+  }
+
+  private cycleProfile(direction: number) {
+    const profiles = profileService.getAllProfiles()
+    if (profiles.length <= 1) return
+    const active = profileService.getActiveProfile()
+    if (!active) return
+    const index = profiles.findIndex((p) => p.id === active.id)
+    if (index === -1) return
+    const next = profiles[(index + direction + profiles.length) % profiles.length]
+    if (!next || next.id === active.id) return
+    profileService.setActiveProfile(next.id)
+    this.sound.play('ui_move', { volume: 0.4 })
+    this.updateProfileHeader()
+  }
+
+  private updateProfileHeader() {
+    const activeProfile = profileService.getActiveProfile()
+    if (!activeProfile || !this.profileNameText) return
+    this.profileNameText.setText(`Active Profile: ${activeProfile.name}`)
+    this.setProfileSaveStatus('')
+    this.updateProfileSwitchVisibility()
+  }
+
+  private updateProfileSwitchVisibility() {
+    const profiles = profileService.getAllProfiles()
+    const disabled = profiles.length <= 1
+    const color = disabled ? '#334452' : '#5ea8c9'
+    if (this.profileSwitchLeft) {
+      this.profileSwitchLeft.setColor(color)
+      if (disabled) {
+        this.profileSwitchLeft.disableInteractive()
+      } else {
+        this.profileSwitchLeft.setInteractive({ useHandCursor: true })
+      }
+    }
+    if (this.profileSwitchRight) {
+      this.profileSwitchRight.setColor(color)
+      if (disabled) {
+        this.profileSwitchRight.disableInteractive()
+      } else {
+        this.profileSwitchRight.setInteractive({ useHandCursor: true })
+      }
+    }
+  }
+
+  private setProfileSaveStatus(message: string) {
+    if (!this.profileSaveStatusText) return
+    const text = message || 'Autosave ready'
+    this.profileSaveStatusText.setText(text)
+    this.profileSaveStatusText.setAlpha(message ? 1 : 0.6)
   }
 }

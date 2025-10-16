@@ -1,4 +1,5 @@
 import { eventBus } from '../core/EventBus'
+import { DEFAULT_ABILITY_IDS } from '../config/abilities'
 import { latencyService } from './LatencyService'
 import { SaveService } from './SaveService'
 
@@ -31,6 +32,7 @@ export interface ProfileRecord {
   currency: number
   archived?: boolean
   achievements: string[]
+  abilities: string[]
 }
 
 export interface ProfileSaveData {
@@ -67,6 +69,7 @@ class ProfileService {
   private activeId: string | null = null
   private saveService = new SaveService<ProfileSaveData>()
   private saveTimeout?: ReturnType<typeof setTimeout>
+  private pendingSave = false
 
   constructor() {
     this.ensureDefaultProfile()
@@ -104,7 +107,10 @@ class ProfileService {
       stats: { ...DEFAULT_STATS, ...partial.stats },
       currency: partial.currency ?? 0,
       archived: false,
-      achievements: partial.achievements ?? []
+      achievements: partial.achievements ?? [],
+      abilities: Array.isArray(partial.abilities) && partial.abilities.length > 0
+        ? [...partial.abilities]
+        : [...DEFAULT_ABILITY_IDS]
     }
     this.profiles.set(id, record)
     if (!this.activeId) {
@@ -150,6 +156,16 @@ class ProfileService {
     this.scheduleSave()
   }
 
+  updateAbilities(id: string, abilities: string[]): void {
+    const profile = this.profiles.get(id)
+    if (!profile) throw new Error(`Profile ${id} not found`)
+    const sanitized = abilities.filter((id) => typeof id === 'string' && id.length > 0)
+    if (sanitized.length === 0) return
+    profile.abilities = [...new Set(sanitized)]
+    this.flagUpdated(profile)
+    this.scheduleSave()
+  }
+
   applyCurrencyDelta(delta: number): number {
     const profile = this.getActiveProfile()
     if (!profile) throw new Error('No active profile')
@@ -182,7 +198,10 @@ class ProfileService {
       this.profiles.set(record.id, {
         ...record,
         stats: { ...DEFAULT_STATS, ...record.stats },
-        achievements: record.achievements ?? []
+        achievements: record.achievements ?? [],
+        abilities: Array.isArray(record.abilities) && record.abilities.length > 0
+          ? [...record.abilities]
+          : [...DEFAULT_ABILITY_IDS]
       })
     })
     this.activeId = data.activeId && this.profiles.has(data.activeId) ? data.activeId : null
@@ -235,15 +254,36 @@ class ProfileService {
 
   private scheduleSave(): void {
     if (this.saveTimeout) clearTimeout(this.saveTimeout)
+    this.emitSavePending('auto')
     this.saveTimeout = setTimeout(() => {
-      this.persist().catch((error) => {
-        console.warn('[ProfileService] Failed to save profiles', error)
-      })
+      void this.persist('auto')
     }, 500)
   }
 
-  private async persist(): Promise<void> {
-    await this.saveService.save(this.serialize())
+  async saveNow(): Promise<void> {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout)
+      this.saveTimeout = undefined
+    }
+    this.emitSavePending('manual')
+    await this.persist('manual')
+  }
+
+  private emitSavePending(reason: 'auto' | 'manual'): void {
+    eventBus.emit('profile:save:pending', { reason })
+    this.pendingSave = true
+  }
+
+  private async persist(reason: 'auto' | 'manual'): Promise<void> {
+    try {
+      await this.saveService.save(this.serialize())
+      eventBus.emit('profile:save:completed', { reason, savedAt: Date.now() })
+    } catch (error) {
+      console.warn('[ProfileService] Failed to save profiles', error)
+    } finally {
+      this.pendingSave = false
+      this.saveTimeout = undefined
+    }
   }
 }
 

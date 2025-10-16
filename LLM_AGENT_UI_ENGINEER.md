@@ -39,4 +39,9 @@ Deliver a reactive, accessible UI suite—from HUD to menus—that pulses with t
 - ProfileScene now consumed ProfileService data; added create/rename/delete controls and rhythm-friendly layout. Coordinate with design to polish avatars and list styling.
 
 ### Latency Wizard
-- Implemented LatencyCalibrationScene (UI-011); OptionsScene now exposes "Calibrate Latency" entry. Follow up with design polish and confirmation messaging.
+- LatencyCalibrationScene (UI-011) now includes countdown rings, sample progress bars, audio cues, and apply confirmations; OptionsScene still launches it via the dedicated row.
+
+### Current Work
+- Ability overlay now consumes live AbilityService states (Pulse Dash, Overdrive) with input hints and status arcs; next step is exposing loadout management/rebinds in the profile menus.
+- OptionsScene surfaces autosave/manual-save status and a manual save action via the new ProfileService save events; wire this into broader profile management UI next.
+- ProfileScene now supports cycling ability loadouts directly; follow up with richer ability detail cards and controller-friendly navigation.

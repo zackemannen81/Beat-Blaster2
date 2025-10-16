@@ -40,3 +40,6 @@ Transform Beat Blaster’s prototype into a responsive, beat-synced combat exper
 
 ### Run Result Integration
 - ResultScene updates profile stats/achievements via ProfileService. Follow up to remove legacy localStorage dependencies and feed currency/XP once economy lands.
+
+### Ability Framework
+- Ability overlay now pulls live cooldown/active data from AbilityService (default Pulse Dash + Overdrive); build out additional abilities, loadout management, and beat-bonus tuning next.

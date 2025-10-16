@@ -5,7 +5,8 @@ import { eventBus } from '../core/EventBus'
 import { AccuracyLevel } from '../systems/Scoring'
 import { Achievement } from '../systems/AchievementSystem'
 import RhythmRing from './RhythmRing'
-import AbilityOverlay, { type AbilityState } from './AbilityOverlay'
+import AbilityOverlay from './AbilityOverlay'
+import type { AbilityState } from '../types/ability'
 
 type PowerupSlot = {
   container: Phaser.GameObjects.Container
@@ -136,6 +137,14 @@ export default class HUD {
 
     eventBus.bindToScene(this.scene, 'currency:changed', ({ total }) => {
       this.setBeatCoins(total)
+    })
+
+    eventBus.bindToScene(this.scene, 'ability:changed', ({ state, states }) => {
+      if (states && states.length > 0) {
+        this.setAbilityStates(states)
+      } else if (state) {
+        this.updateAbilityState(state)
+      }
     })
 
     this.bossContainer = this.scene.add.container(width / 2, 80).setVisible(false).setDepth(40)
@@ -366,8 +375,8 @@ export default class HUD {
     this.abilityOverlay?.setAbilityStates(states)
   }
 
-  updateAbilityCooldown(id: string, remainingMs: number, cooldownMs?: number): void {
-    this.abilityOverlay?.updateAbilityCooldown(id, remainingMs, cooldownMs)
+  updateAbilityState(state: AbilityState): void {
+    this.abilityOverlay?.updateAbilityState(state)
   }
 
   setCrosshairMode(mode: 'pointer' | 'fixed' | 'pad-relative') {
