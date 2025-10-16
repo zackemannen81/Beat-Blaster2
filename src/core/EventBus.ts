@@ -1,5 +1,6 @@
 import type Phaser from 'phaser'
 import type { ProfileRecord } from '../systems/ProfileService'
+import type { AbilityState } from '../types/ability'
 
 export type EventUnsubscribe = () => void
 
@@ -14,6 +15,9 @@ export interface EventPayloads {
   'latency:changed': { offsetMs: number; updatedAt: number; source: 'default' | 'calibration' | 'manual' }
   'profile:changed': { id: string; profile: ProfileRecord }
   'profile:updated': { id: string; profile: ProfileRecord }
+  'profile:save:pending': { reason: 'auto' | 'manual' }
+  'profile:save:completed': { reason: 'auto' | 'manual'; savedAt: number }
+  'ability:changed': { id?: string; state?: AbilityState; states?: AbilityState[] }
 }
 
 type Listener<T> = (payload: T) => void

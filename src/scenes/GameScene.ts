@@ -17,7 +17,9 @@ import LanePatternController, { LaneEffect } from '../systems/LanePatternControl
 import BeatWindow, { BeatJudgement } from '../systems/BeatWindow'
 import BeatClock from '../audio/BeatClock'
 import { eventBus } from '../core/EventBus'
-import type { AbilityState } from '../ui/AbilityOverlay'
+import { AbilityService } from '../systems/AbilityService'
+import type { AbilityState } from '../types/ability'
+import { DEFAULT_ABILITY_IDS, getAbilityDefinitions } from '../config/abilities'
 import { latencyService } from '../systems/LatencyService'
 import { getDifficultyProfile, DifficultyProfile, DifficultyProfileId, StageTuning } from '../config/difficultyProfiles'
 import WaveDirector from '../systems/WaveDirector'
@@ -28,6 +30,7 @@ import type { BossDefinition, BossBehavior } from '../types/bosses'
 import { getWavePlaylist } from '../systems/WaveLibrary'
 import Announcer, { AnnouncerVoiceId } from '../systems/Announcer'
 import { AchievementSystem } from '../systems/AchievementSystem'
+import { profileService } from '../systems/ProfileService'
 
 import { loadPatternData } from '../editor/patternStore';
 import { CustomPattern } from '../systems/patterns/CustomPattern';
@@ -58,7 +61,9 @@ export default class GameScene extends Phaser.Scene {
   private beatClockStarted = false
   private perfectWindowMs = 30
   private goodWindowMs = 75
-  private abilityStates: AbilityState[] = []
+  private abilityService!: AbilityService
+  private abilityBindings: { id: string; key: string }[] = []
+  private gamepadAbilityLatch: Record<string, boolean> = {}
   private music?: Phaser.Sound.BaseSound
   private bullets!: Phaser.Physics.Arcade.Group
   private missiles!: Phaser.Physics.Arcade.Group
@@ -80,6 +85,9 @@ export default class GameScene extends Phaser.Scene {
   private announcer!: Announcer
   private achievementSystem!: AchievementSystem
   private lastDashToggle = 0
+  private dashActiveUntil = 0
+  private dashDirection = new Phaser.Math.Vector2(0, 0)
+  private dashSpeed = 900
   private lastBeatAt = 0
   private beatCount = 0
   private nextQuantizedShotAt = 0
@@ -747,7 +755,7 @@ export default class GameScene extends Phaser.Scene {
     this.hud.setCombo(0)
     this.hud.setBpm(bpm)
     this.hud.setLaneCount(this.lanes?.getCount() ?? this.resolveLaneCount())
-    this.initializeAbilityOverlay()
+    this.setupAbilities()
 
     this.announcer.playEvent('new_game')
 
@@ -938,7 +946,7 @@ export default class GameScene extends Phaser.Scene {
       this.waveDirector?.update()
     }
 
-    this.updateAbilityOverlay(delta)
+    this.abilityService?.update(delta)
 
       if (this.time.now - this.lastBeatAt < 100) { // Visa cirkeln i 100ms efter varje beat
         this.beatIndicator.setAlpha(1);
@@ -1016,11 +1024,34 @@ export default class GameScene extends Phaser.Scene {
         this.handleFireInputUp()
       }
 
+      const primaryAbilityBinding = this.abilityBindings[0]
+      if (primaryAbilityBinding) {
+        const pressed = Boolean(pad.buttons[4]?.pressed)
+        if (pressed && !this.gamepadAbilityLatch[primaryAbilityBinding.id]) {
+          this.tryActivateAbility(primaryAbilityBinding.id)
+        }
+        this.gamepadAbilityLatch[primaryAbilityBinding.id] = pressed
+      }
+
+      const secondaryAbilityBinding = this.abilityBindings[1]
+      if (secondaryAbilityBinding) {
+        const pressed = Boolean(pad.buttons[3]?.pressed)
+        if (pressed && !this.gamepadAbilityLatch[secondaryAbilityBinding.id]) {
+          this.tryActivateAbility(secondaryAbilityBinding.id)
+        }
+        this.gamepadAbilityLatch[secondaryAbilityBinding.id] = pressed
+      }
+
       const bombPressed = pad.buttons[5]?.pressed || pad.buttons[7]?.pressed
       if (bombPressed && this.bombCharge >= 100) this.triggerBomb()
-    } else if (this.gamepadFireActive) {
-      this.gamepadFireActive = false
-      this.handleFireInputUp()
+    } else {
+      if (this.gamepadFireActive) {
+        this.gamepadFireActive = false
+        this.handleFireInputUp()
+      }
+      this.abilityBindings.forEach((binding) => {
+        this.gamepadAbilityLatch[binding.id] = false
+      })
     }
 
     const navTarget = this.navTarget
@@ -1083,14 +1114,19 @@ export default class GameScene extends Phaser.Scene {
       ? stageHeight / 1
       : this.scale.width / 1
 
-    const targetVelocity = new Phaser.Math.Vector2(moveX, moveY)
-    if (targetVelocity.lengthSq() > 1) targetVelocity.normalize()
-    targetVelocity.scale(maxSpeed)
+    let targetVelocity = new Phaser.Math.Vector2(moveX, moveY)
+    const dashActive = this.time.now < this.dashActiveUntil && this.dashDirection.lengthSq() > 0
+    if (dashActive) {
+      targetVelocity = this.dashDirection.clone().normalize().scale(this.dashSpeed)
+    } else {
+      if (targetVelocity.lengthSq() > 1) targetVelocity.normalize()
+      targetVelocity.scale(maxSpeed)
+    }
 
-    const lerp = 0.2
-    let newVelX = Phaser.Math.Linear(body.velocity.x, targetVelocity.x, lerp)
-    let newVelY = Phaser.Math.Linear(body.velocity.y, targetVelocity.y, lerp)
-    if (targetVelocity.lengthSq() < 0.01) {
+    const lerp = dashActive ? 1 : 0.2
+    let newVelX = dashActive ? targetVelocity.x : Phaser.Math.Linear(body.velocity.x, targetVelocity.x, lerp)
+    let newVelY = dashActive ? targetVelocity.y : Phaser.Math.Linear(body.velocity.y, targetVelocity.y, lerp)
+    if (!dashActive && targetVelocity.lengthSq() < 0.01) {
       newVelX *= 0.82
       newVelY *= 0.82
     }
@@ -1599,45 +1635,95 @@ pskin?.setThrust?.(thrustLevel)
     this.hud.showShotFeedback(quality, accuracy)
   }
 
-  private initializeAbilityOverlay() {
-    this.abilityStates = [
-      {
-        id: 'pulse_dash',
-        label: 'Pulse Dash',
-        cooldownMs: 5000,
-        remainingMs: 0,
-        tier: 1,
-        beatBonus: 'Perfect + distance'
-      },
-      {
-        id: 'overdrive',
-        label: 'Overdrive',
-        cooldownMs: 12000,
-        remainingMs: 0,
-        tier: 2,
-        beatBonus: 'Beat = +75% dmg'
-      }
-    ]
-    this.hud.setAbilityStates(this.abilityStates)
-    this.time.addEvent({ delay: 8000, loop: true, callback: () => this.triggerAbilityCooldown('pulse_dash') })
-    this.time.addEvent({ delay: 14000, loop: true, callback: () => this.triggerAbilityCooldown('overdrive') })
-  }
+  private setupAbilities() {
+    const profile = profileService.getActiveProfile()
+    const profileAbilities = profile?.abilities ?? []
+    const abilityIds = profileAbilities.length > 0 ? profileAbilities : DEFAULT_ABILITY_IDS
+    const definitions = getAbilityDefinitions(abilityIds.length > 0 ? abilityIds : DEFAULT_ABILITY_IDS)
+    this.abilityService = new AbilityService(definitions)
+    this.hud.setAbilityStates(this.abilityService.getStates())
 
-  private triggerAbilityCooldown(id: string) {
-    const state = this.abilityStates.find((s) => s.id === id)
-    if (!state || state.remainingMs > 0) return
-    state.remainingMs = state.cooldownMs
-    this.hud.updateAbilityCooldown(state.id, state.remainingMs, state.cooldownMs)
-  }
+    const keyboard = this.input.keyboard!
+    const listeners: Array<{ event: string; handler: () => void }> = []
+    const keyAssignments = ['Q', 'R']
+    this.abilityBindings = []
 
-  private updateAbilityOverlay(delta: number) {
-    if (this.abilityStates.length === 0) return
-    this.abilityStates.forEach((state) => {
-      if (state.remainingMs > 0) {
-        state.remainingMs = Math.max(0, state.remainingMs - delta)
-        this.hud.updateAbilityCooldown(state.id, state.remainingMs, state.cooldownMs)
-      }
+    keyAssignments.forEach((keyName, index) => {
+      const abilityId = definitions[index]?.id
+      if (!abilityId) return
+      const event = `keydown-${keyName}`
+      const handler = () => this.tryActivateAbility(abilityId)
+      keyboard.on(event, handler, this)
+      listeners.push({ event, handler })
+      this.abilityBindings.push({ id: abilityId, key: keyName })
     })
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      listeners.forEach(({ event, handler }) => keyboard.off(event, handler, this))
+      this.abilityBindings = []
+      this.gamepadAbilityLatch = {}
+    })
+  }
+
+  private tryActivateAbility(id: string) {
+    if (!this.abilityService?.canActivate(id)) return
+    const snapshot = this.abilityService.activate(id)
+    if (!snapshot) return
+    this.applyAbilityEffect(snapshot)
+  }
+
+  private applyAbilityEffect(state: AbilityState) {
+    const durationMs = state.durationMs ?? 0
+    switch (state.id) {
+      case 'pulse_dash':
+        this.performPulseDash(Math.max(durationMs, 360))
+        break
+      case 'overdrive':
+        this.activateOverdrive(Math.max(durationMs, 5000))
+        break
+      default:
+        break
+    }
+  }
+
+  private performPulseDash(durationMs: number) {
+    const direction = this.getAimDirection().clone()
+    if (direction.lengthSq() === 0) {
+      direction.set(0, -1)
+    } else {
+      direction.normalize()
+    }
+
+    this.dashDirection.copy(direction)
+    this.dashActiveUntil = this.time.now + durationMs
+    this.iframesUntil = Math.max(this.iframesUntil, this.time.now + durationMs + 120)
+
+    const body = this.player.body as Phaser.Physics.Arcade.Body
+    body.setVelocity(direction.x * this.dashSpeed, direction.y * this.dashSpeed)
+
+    const trail = this.add.graphics({ x: this.player.x, y: this.player.y }).setDepth(90)
+    trail.fillStyle(0x66ffda, 0.4)
+    trail.fillCircle(0, 0, 28)
+    this.tweens.add({
+      targets: trail,
+      alpha: 0,
+      scale: 1.8,
+      duration: durationMs,
+      ease: 'Cubic.easeOut',
+      onComplete: () => trail.destroy()
+    })
+
+    this.sound.play('ui_select', { volume: this.opts.sfxVolume * 0.6 })
+  }
+
+  private activateOverdrive(durationMs: number) {
+    const seconds = Math.max(0.1, durationMs / 1000)
+    this.powerups?.apply('rapid', seconds)
+    this.bumpBomb(5)
+    if (!this.reducedMotion) {
+      this.cameras.main.flash(120, 255, 93, 177)
+    }
+    this.sound.play('ui_select', { volume: this.opts.sfxVolume * 0.9 })
   }
 
   private spawnPlasmaBullet(direction: Phaser.Math.Vector2, lifetimeMs?: number, metadata?: BulletMetadata) {

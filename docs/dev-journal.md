@@ -256,3 +256,51 @@ Notes:
   - Build (`npm run build`) succeeded (≈53s) after timeout; only known asset size warnings remain.
 Next:
   - Polish calibration visuals and add confirmation messaging; hook profile management into menu buttons for quicker access.
+2025-10-11 08:32 CEST — codex
+Roles: UI Engineer, Gameplay Engineer
+Tasks: UI-011 polish, UI-012 ability overlay
+Notes:
+  - LatencyCalibrationScene now features countdown visuals, real-time sample feedback, apply/ retry shortcuts, and automatic profile updates when an offset is saved; OptionsScene refreshes on wake and uses profile latency settings.
+  - Introduced AbilityOverlay component in HUD showing bomb charge and placeholder ability cooldown arcs; GameScene currently feeds mocked ability data pending gameplay integration.
+  - Menu/Options build verified (`npm run build` ~33s) with expected asset-size warnings.
+Next:
+ - Replace mocked ability data with real ability state once the gameplay framework lands.
+  - Apply design polish to the latency wizard (graphics/audio cues) and expose manual save feedback to the player.
+2025-10-11 09:20 CEST — codex
+Roles: UI Engineer, Gameplay Engineer
+Tasks: UI-012, GAMEPLAY-016 groundwork
+Notes:
+  - Wired AbilityService to profile loadouts and EventBus, replacing the placeholder timers so HUD overlays track real cooldown/active windows.
+  - Added profile-level ability defaults (Pulse Dash, Overdrive) with Q/R and LB/Y bindings plus gamepad latching, emitting true ability states back to the UI.
+  - Implemented Pulse Dash dash/invulnerability burst and Overdrive rapid-fire buff via existing Powerups, refreshing AbilityOverlay visuals with status arcs, input hints, and beat-ready flashes.
+  - `npm run build` passes (~73s) with only known asset warnings.
+Next:
+  - Surface ability loadouts in profile menus, allow rebinds, and backfill unit coverage once the QA backlog opens.
+2025-10-11 09:55 CEST — codex
+Roles: UI Engineer
+Tasks: UI-011 polish, UI-008 profile save feedback
+Notes:
+  - LatencyCalibrationScene now layers countdown rings, progress bars, and confirmation pulses with per-step audio cues; applying an offset shows a beat-synced “saved” toast before returning to Options.
+  - Added autosave/manual save status indicators to OptionsScene alongside a `Save Profile Now` row that triggers `ProfileService.saveNow()` via the new `profile:save:*` EventBus signals.
+  - ProfileService now emits save pending/completed events, enabling the settings UI to reflect live persistence state.
+  - `npm run build` passes (~74s) with standard asset-size warnings.
+Next:
+  - Thread ability loadout editing into profile/menus, and backfill save-service unit coverage when QA bandwidth opens.
+2025-10-11 10:20 CEST — codex
+Roles: UI Engineer, Gameplay Engineer
+Tasks: UI-012 continuation, UI-008
+Notes:
+  - ProfileScene now lets players cycle primary/secondary abilities with left/right click, updating ProfileService’s ability loadouts so GameScene consumes real selections.
+  - OptionsScene shows the current ability pair alongside the new manual-save control, keeping settings and gameplay bindings aligned.
+  - `npm run build` passes (~76s) with the usual asset-size warnings.
+Next:
+  - Expand the ability roster/rebind UX and add targeted AbilityService/ProfileService unit coverage when QA capacity allows.
+2025-10-11 10:32 CEST — codex
+Roles: UI Engineer
+Tasks: UI-008 profile polish
+Notes:
+  - MenuScene now supports quick profile switching via bracket keys or on-screen arrows and surfaces autosave/ manual-save status via the new profile save events.
+  - Profile header updates immediately when switching, keeping the loadout summary in Options/Profile in sync.
+  - `npm run build` passes (~76s) with standard asset-size warnings.
+Next:
+  - Wire controller-friendly profile switching and integrate ability rebind UI in the upcoming accessibility/settings pass.
