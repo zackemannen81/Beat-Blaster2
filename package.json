@@ -4,15 +4,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "pnpm validate && vite build",
     "preview": "vite preview",
-    "test": "vitest"
+    "validate-config": "tsx scripts/validate-config.ts",
+    "validate": "pnpm validate-config",
+    "test": "pnpm validate && vitest"
   },
   "dependencies": {
-    "phaser": "^3.80.0"
+    "phaser": "^3.80.0",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@types/node": "^22.7.4",
+    "tsx": "^4.20.6",
     "typescript": "^5.6.2",
     "vite": "^5.4.0",
     "vite-plugin-static-copy": "^3.1.2",
