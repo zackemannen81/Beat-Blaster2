@@ -3,11 +3,11 @@ import Phaser from 'phaser'
 type AudioSourceManifest = Record<string, string[]>
 
 const ANNOUNCER_AUDIO_SOURCES: AudioSourceManifest = (() => {
-  const wavFiles = import.meta.glob('../assets/audio/sfx/**/*.wav', {
+  const wavFiles = import.meta.glob('../content/audio/sfx/**/*.wav', {
     eager: true,
     as: 'url'
   }) as Record<string, string>
-  const mp3Files = import.meta.glob('../assets/audio/sfx/**/*.mp3', {
+  const mp3Files = import.meta.glob('../content/audio/sfx/**/*.mp3', {
     eager: true,
     as: 'url'
   }) as Record<string, string>
@@ -118,29 +118,29 @@ export default class BootScene extends Phaser.Scene {
     // Atlases (TexturePacker JSON Hash)
     this.load.atlas(
       'gameplay',
-      'src/assets/sprites/gameplay.atlas.png',
-      'src/assets/sprites/gameplay.atlas.json'
+      'src/content/sprites/gameplay.atlas.png',
+      'src/content/sprites/gameplay.atlas.json'
     )
     this.load.atlas(
       'ui',
-      'src/assets/sprites/ui.atlas.png',
-      'src/assets/sprites/ui.atlas.json'
+      'src/content/sprites/ui.atlas.png',
+      'src/content/sprites/ui.atlas.json'
     )
     this.load.atlas(
       'particles',
-      'src/assets/sprites/particles.atlas.png',
-      'src/assets/sprites/particles.atlas.json'
+      'src/content/sprites/particles.atlas.png',
+      'src/content/sprites/particles.atlas.json'
     )
     /*
     this.load.setBaseURL('https://cdn.phaserfiles.com/v385');
-    this.load.atlas('cube', 'assets/animations/cube.png', 'assets/animations/cube.json')
+    this.load.atlas('cube', 'content/animations/cube.png', 'content/animations/cube.json')
     this.load.setBaseURL('')
     */
     // Background now procedural (Starfield system); no image required
     // Load menu logo
-    this.load.image('menulogo', 'src/assets/sprites/menulogo.png')
+    this.load.image('menulogo', 'src/content/sprites/menulogo.png')
     // Load background image.
-    this.load.image('background', 'src/assets/backgrounds/anal.png')
+    this.load.image('background', 'src/content/backgrounds/anal.png')
 
     // Config
     this.load.json('tracks', 'src/config/tracks.json')
@@ -149,40 +149,40 @@ export default class BootScene extends Phaser.Scene {
 
     // Minimal SFX; Phaser supports array for codec fallbacks
     this.load.audio('ui_move', [
-      'src/assets/audio/sfx/ui_move.wav',
-      'src/assets/audio/sfx/ui_move.mp3',
-      'src/assets/audio/sfx/ui_move.ogg'
+      'src/content/audio/sfx/ui_move.wav',
+      'src/content/audio/sfx/ui_move.mp3',
+      'src/content/audio/sfx/ui_move.ogg'
     ])
     this.load.audio('ui_select', [
-      'src/assets/audio/sfx/ui_select.wav',
-      'src/assets/audio/sfx/ui_select.mp3',
-      'src/assets/audio/sfx/ui_select.ogg'
+      'src/content/audio/sfx/ui_select.wav',
+      'src/content/audio/sfx/ui_select.mp3',
+      'src/content/audio/sfx/ui_select.ogg'
     ])
     this.load.audio('ui_back', [
-      'src/assets/audio/sfx/ui_back.wav',
-      'src/assets/audio/sfx/ui_back.mp3',
-      'src/assets/audio/sfx/ui_back.ogg'
+      'src/content/audio/sfx/ui_back.wav',
+      'src/content/audio/sfx/ui_back.mp3',
+      'src/content/audio/sfx/ui_back.ogg'
     ])
     this.load.audio('shot', [
-      'src/assets/audio/sfx/shot.wav'
+      'src/content/audio/sfx/shot.wav'
     ])
     this.load.audio('hit_enemy', [
-      'src/assets/audio/sfx/hit_enemy.ogg'
+      'src/content/audio/sfx/hit_enemy.ogg'
     ])
     this.load.audio('explode_big', [
-      'src/assets/audio/sfx/explode_big.wav',
-      'src/assets/audio/sfx/explode_big.ogg'
+      'src/content/audio/sfx/explode_big.wav',
+      'src/content/audio/sfx/explode_big.ogg'
     ])
     this.load.audio('metronome', [
-      'src/assets/audio/sfx/metronome.wav',
-      'src/assets/audio/sfx/metronome.mp3'
+      'src/content/audio/sfx/metronome.wav',
+      'src/content/audio/sfx/metronome.mp3'
     ])
     Object.entries(ANNOUNCER_AUDIO_SOURCES).forEach(([key, sources]) => {
       this.load.audio(key, sources)
     })
     // Note: pickup sound uses UI select as placeholder for browser compatibility
 
-    const plasmaBasePath = 'src/assets/sprites/plasmabeam'
+    const plasmaBasePath = 'src/content/sprites/plasmabeam'
     const loadSequence = (prefix: string, count: number) => {
       for (let i = 0; i < count; i++) {
         this.load.image(`${prefix}_${i}`, `${plasmaBasePath}/${prefix}_${i}.png`)
@@ -199,7 +199,7 @@ export default class BootScene extends Phaser.Scene {
 
     const loadPowerupSeq = (prefix: string) => {
       for (let i = 0; i < 8; i++) {
-        this.load.image(`${prefix}_${i}`, `src/assets/sprites/powerups/${prefix}_${i}.png`)
+        this.load.image(`${prefix}_${i}`, `src/content/sprites/powerups/${prefix}_${i}.png`)
       }
     }
 
@@ -208,10 +208,10 @@ export default class BootScene extends Phaser.Scene {
     loadPowerupSeq('powerup_split')
     loadPowerupSeq('powerup_slowmo')
 
-    this.load.image('powerup_badge_shield', 'src/assets/sprites/powerups/powerup_badge_shield.png')
-    this.load.image('powerup_badge_rapid', 'src/assets/sprites/powerups/powerup_badge_rapid.png')
-    this.load.image('powerup_badge_split', 'src/assets/sprites/powerups/powerup_badge_split.png')
-    this.load.image('powerup_badge_slowmo', 'src/assets/sprites/powerups/powerup_badge_slowmo.png')
+    this.load.image('powerup_badge_shield', 'src/content/sprites/powerups/powerup_badge_shield.png')
+    this.load.image('powerup_badge_rapid', 'src/content/sprites/powerups/powerup_badge_rapid.png')
+    this.load.image('powerup_badge_split', 'src/content/sprites/powerups/powerup_badge_split.png')
+    this.load.image('powerup_badge_slowmo', 'src/content/sprites/powerups/powerup_badge_slowmo.png')
 
     this.load.image('pink_beam_arc', `${plasmaBasePath}/pink_beam_arc.png`)
     this.load.image('plasma_glow_disc', `${plasmaBasePath}/plasma_glow_disc.png`)
