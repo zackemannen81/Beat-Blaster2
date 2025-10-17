@@ -1,8 +1,8 @@
 import Phaser from 'phaser'
-import Starfield from '../systems/Starfield'
-import { loadOptions, detectGameplayModeOverride, resolveGameplayMode } from '../systems/Options';
+import Starfield from '@systems/Starfield'
+import { loadOptions, detectGameplayModeOverride, resolveGameplayMode } from '@systems/Options';
 import { listSavedPatterns } from '../editor/patternStore';
-import { profileService } from '../systems/ProfileService'
+import { profileService } from '@systems/ProfileService'
 import { eventBus } from '../core/EventBus'
 
 type MenuItem =

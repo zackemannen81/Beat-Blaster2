@@ -1,8 +1,8 @@
 import Phaser from 'phaser'
 import { addScore, loadBoard } from '../net/localLeaderboard';
 import { submitScore } from '../net/onlineLeaderboard';
-import { AchievementSystem } from '../systems/AchievementSystem';
-import { profileService } from '../systems/ProfileService';
+import { AchievementSystem } from '@systems/AchievementSystem';
+import { profileService } from '@systems/ProfileService';
 
 export default class ResultScene extends Phaser.Scene {
   constructor() {

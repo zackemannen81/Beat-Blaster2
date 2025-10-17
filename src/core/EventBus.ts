@@ -1,5 +1,5 @@
 import type Phaser from 'phaser'
-import type { ProfileRecord } from '../systems/ProfileService'
+import type { ProfileRecord } from '@systems/ProfileService'
 import type { AbilityState } from '../types/ability'
 
 export type EventUnsubscribe = () => void
