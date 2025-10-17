@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { EditorState } from '../editor/EditorState';
 import { HistoryService } from '../editor/HistoryService';
-import { SpawnAction } from '../systems/LanePatternController';
+import { SpawnAction } from '@gameplay/LanePatternController';
 import { TimelineUI } from '../editor/ui/TimelineUI';
 import { ObjectPaletteUI } from '../editor/ui/ObjectPaletteUI';
 import { PatternEditorUI } from '../editor/ui/PatternEditorUI';

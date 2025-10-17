@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import CubeSkin from '../systems/CubeSkin'
+import CubeSkin from '@systems/CubeSkin'
 import { enemyStyles, EnemyType } from '../config/enemyStyles'
 import { BossBehavior } from '../types/bosses'
 import { WaveDescriptor, FormationId } from '../types/waves'

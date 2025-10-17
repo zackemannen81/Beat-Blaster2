@@ -1,8 +1,8 @@
 import Phaser from 'phaser'
 import RhythmRing from '../ui/RhythmRing'
 import BeatClock from '../audio/BeatClock'
-import { latencyService } from '../systems/LatencyService'
-import { profileService } from '../systems/ProfileService'
+import { latencyService } from '@systems/LatencyService'
+import { profileService } from '@systems/ProfileService'
 
 interface LatencySceneData {
   returnScene?: string

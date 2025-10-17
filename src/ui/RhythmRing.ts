@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import { BeatJudgement } from '../systems/BeatWindow'
+import { BeatJudgement } from '@systems/BeatWindow'
 
 interface RhythmRingOptions {
   radius?: number

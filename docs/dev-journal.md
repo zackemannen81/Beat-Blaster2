@@ -304,3 +304,22 @@ Notes:
   - `npm run build` passes (~76s) with standard asset-size warnings.
 Next:
   - Wire controller-friendly profile switching and integrate ability rebind UI in the upcoming accessibility/settings pass.
+
+2025-10-18 14:00 CEST — Gemini
+Task: CORE-009 Refactor Source Structure into Modular Architecture
+Plan:
+  1) Analyze current folder structure and tsconfig.json against the task description.
+  2) Identify files that need to be moved to align with the documented modular architecture.
+  3) Create new directories as needed (e.g., `gameplay/`, `content/`).
+  4) Move files to their new locations.
+  5) Update `tsconfig.json` with any new path aliases.
+  6) Update all necessary imports in the moved files and files that import them.
+  7) Run build and lint to ensure everything is working correctly.
+  8) Update documentation with the new structure.
+Validation:
+  - `pnpm run build` should succeed.
+  - `pnpm run lint` should pass.
+Risks:
+  - High risk of breaking imports and causing build failures. Will need to be very careful and systematic.
+Next:
+  - Create a feature branch and start the refactoring.

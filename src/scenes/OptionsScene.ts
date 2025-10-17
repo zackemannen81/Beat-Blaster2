@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
-import { loadOptions, saveOptions, Options, detectGameplayModeOverride, resolveGameplayMode } from '../systems/Options'
-import { profileService } from '../systems/ProfileService'
+import { loadOptions, saveOptions, Options, detectGameplayModeOverride, resolveGameplayMode } from '@systems/Options'
+import { profileService } from '@systems/ProfileService'
 import { eventBus } from '../core/EventBus'
 import { abilityDefinitions, DEFAULT_ABILITY_IDS } from '../config/abilities'
 import type { AbilityDefinition } from '../types/ability'

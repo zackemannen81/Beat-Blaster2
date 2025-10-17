@@ -1,4 +1,4 @@
-import { CubeSkinOptions } from '../systems/CubeSkin'
+import { CubeSkinOptions } from '@systems/CubeSkin'
 
 export type EnemyType =
   | 'brute'

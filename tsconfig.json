@@ -12,7 +12,17 @@
     "types": ["node", "vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@scenes/*": ["src/scenes/*"]
+      "@scenes/*": ["src/scenes/*"],
+      "@gameplay/*": ["src/gameplay/*"],
+      "@systems/*": ["src/systems/*"],
+      "@core/*": ["src/core/*"],
+      "@audio/*": ["src/audio/*"],
+      "@ui/*": ["src/ui/*"],
+      "@config/*": ["src/config/*"],
+      "@content/*": ["src/content/*"],
+      "@net/*": ["src/net/*"],
+      "@editor/*": ["src/editor/*"],
+      "@types/*": ["src/types/*"]
     }
   },
   "include": ["src"]

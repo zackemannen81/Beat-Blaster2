@@ -2,7 +2,7 @@
 
 **Task ID:** CORE-009
 
-**Status:** OPEN
+**Status:** IN_PROGRESS
 
 **Description:**
 

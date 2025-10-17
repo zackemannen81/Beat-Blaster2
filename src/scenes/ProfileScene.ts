@@ -1,7 +1,7 @@
 
 import Phaser from 'phaser';
-import { profileService } from '../systems/ProfileService'
-import type { Achievement } from '../systems/AchievementSystem';
+import { profileService } from '@systems/ProfileService'
+import type { Achievement } from '@systems/AchievementSystem';
 import achievements from '../config/achievements.json';
 import { getAllAbilityDefinitions } from '../config/abilities';
 import type { AbilityDefinition } from '../types/ability';

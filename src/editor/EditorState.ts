@@ -1,4 +1,4 @@
-import { BeatStep, SpawnAction } from '../systems/LanePatternController';
+import { BeatStep, SpawnAction } from '@gameplay/LanePatternController';
 import { Command, HistoryService } from './HistoryService';
 
 // --- Command Implementations ---
