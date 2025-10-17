@@ -2,7 +2,7 @@
 
 **Task ID:** CORE-015
 
-**Status:** OPEN
+**Status:** IN_PROGRESS
 
 **Description:**
 

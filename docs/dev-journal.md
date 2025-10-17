@@ -323,3 +323,19 @@ Risks:
   - High risk of breaking imports and causing build failures. Will need to be very careful and systematic.
 Next:
   - Create a feature branch and start the refactoring.
+
+2025-10-18 14:30 CEST — Gemini
+Task: CORE-015 Add Config Schema Validation
+Plan:
+  1) Install zod, a TypeScript-first schema declaration and validation library.
+  2) Create schema definitions for the main configuration files (`balance.json`, `tracks.json`, etc.).
+  3) Create a validation script that can be run from the command line.
+  4) Integrate the validation script into the build process.
+  5) Add documentation for the new validation process.
+Validation:
+  - `pnpm run test` should run the validation script.
+  - The build should fail if a config file is invalid.
+Risks:
+  - The schemas might become out of sync with the code.
+Next:
+  - Start by installing zod.
