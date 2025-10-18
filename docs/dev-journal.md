@@ -339,3 +339,58 @@ Risks:
   - The schemas might become out of sync with the code.
 Next:
   - Start by installing zod.
+2025-10-11 11:00 CEST — codex
+Roles: Producer/PM
+Summary:
+  - Phase A deliverables (BeatClock/EventBus, latency stack, Save/Profile services, HUD v2, calibration wizard) are merged into `main`. Rhythm core is locked for Sprint 1.
+  - Phase B (Player Feel & HUD Feedback) is queued next: focus on movement/dash rewrite (GAMEPLAY-014), bomb rework (GAMEPLAY-017), final HUD polish (UI-004/UI-012), latency wizard refinements (UI-011), and ability integrations.
+Next:
+  - Kick off Phase B feature work per `docs/design/phaseB_player_feel.md`.
+  - Ensure new Sprint planning references updated ProfileService/AbilityService foundations.
+
+*** End of Phase A ***
+
+
+2025-10-18 17:20 CEST — codex
+Roles: Gameplay Engineer
+Task: GAMEPLAY-014 Rebuild Player Movement and Dash
+Summary:
+  - Added configurable movement/dash tuning and difficulty-based hitboxes via `src/config/playerMovement.ts`.
+  - Refactored `GameScene` movement to use acceleration/drag curves and beat-synced dash bonuses with gamepad rumble + HUD cues.
+  - HUD now surfaces dash feedback and ability overlay reflects updated dash duration copy.
+Next:
+ - Hook combo-based bomb charge into new movement feedback loops.
+  - Evaluate dash window tuning after internal playtest.
+
+2025-10-18 19:05 CEST — codex
+Roles: Gameplay Engineer
+Task: GAMEPLAY-017 Bomb Rework
+Summary:
+  - Replaced kill-tick bomb meter with combo-driven tuning (`bombConfig`), scaling charge off perfect hits and draining on damage/beat misses.
+  - Bomb activation now checks BeatClock timing; perfect beats wipe the field, near-miss pulses deal heavy damage, and off-beat attempts consume charge with HUD warnings.
+  - HUD/Ability overlay gained beat-window cues, bomb readiness messaging, and detonation flashes wired through `HUD.showBombFeedback` and `flashBombDetonate`.
+Next:
+ - Playtest bomb cadence vs combo pacing; tweak `comboStep`/`missPenalty` once QA has feel notes.
+  - Thread bomb readiness into audio mix (sidechain duck) during UI polish pass.
+
+2025-10-18 20:10 CEST — codex
+Roles: UI Engineer
+Tasks: UI-004, UI-012 HUD polish
+Summary:
+  - Ability overlay now surfaces cooldown/active timers, binding hints from GameScene, and high-contrast palette toggled via options.
+  - HUD bomb meter mirrors beat windows with new readouts and high-contrast styling; dash/bomb feedback copy tuned for accessibility.
+  - Profile-driven ability loadouts flow through AbilityService, ensuring overlay stays synced when bindings change.
+Next:
+  - Audit latency wizard visuals/audio (UI-011) before sprint cutoff.
+ - Capture QA impressions on the new status text readability across colorblind/high-contrast modes.
+
+2025-10-18 21:00 CEST — codex
+Roles: UI Engineer
+Task: UI-011 Latency Wizard Enhancements
+Summary:
+  - Redesigned calibration flow with step timeline, preview hints, and metronome audio cues powered by BeatClock so players can feel the suggested offset before applying it.
+  - Added sample stats (median/avg/spread/std), improved progress visuals, and high-contrast aware styling plus controller-friendly prompts.
+  - Confirmation banner now highlights profile updates and keeps the preview looping until players exit or resample.
+Next:
+  - Verify UX on gamepad (A/R bindings) and gather telemetry on sample spreads to auto-adjust target counts if needed.
+  - Revisit UI copy once localization guidelines land in Phase C.

@@ -1,5 +1,7 @@
 # Phase A Core Systems Plan (CORE-006 & CORE-007)
 
+**Status:** Completed 2025-10-11 – BeatClock/EventBus/Latency foundations landed. Ready to transition to Phase B (Player Feel & HUD Feedback).
+
 ## Goals
 - Establish a shared event bus under `src/core/EventBus.ts` so subsystems can communicate without tight coupling.
 - Build a deterministic BeatClock service that feeds beat/sub-beat callbacks and timing window checks to gameplay, UI, and economy systems.
