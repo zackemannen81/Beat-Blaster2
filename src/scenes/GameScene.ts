@@ -20,6 +20,8 @@ import { eventBus } from '../core/EventBus'
 import { AbilityService } from '@gameplay/AbilityService'
 import type { AbilityState } from '../types/ability'
 import { DEFAULT_ABILITY_IDS, getAbilityDefinitions } from '../config/abilities'
+import { bombConfig } from '../config/bomb'
+import { getMovementTuning, getDashTuning, getHitboxTuning } from '../config/playerMovement'
 import { latencyService } from '@systems/LatencyService'
 import { getDifficultyProfile, DifficultyProfile, DifficultyProfileId, StageTuning } from '../config/difficultyProfiles'
 import WaveDirector from '@gameplay/WaveDirector'
@@ -64,6 +66,7 @@ export default class GameScene extends Phaser.Scene {
   private abilityService!: AbilityService
   private abilityBindings: { id: string; key: string }[] = []
   private gamepadAbilityLatch: Record<string, boolean> = {}
+  private gamepadBombLatch = false
   private music?: Phaser.Sound.BaseSound
   private bullets!: Phaser.Physics.Arcade.Group
   private missiles!: Phaser.Physics.Arcade.Group
@@ -79,15 +82,22 @@ export default class GameScene extends Phaser.Scene {
   private playerHp = 3
   private playerMaxHp = 3
   private iframesUntil = 0
-  private bombCharge = 0 // 0..100
+  private playerHitboxRadius = getHitboxTuning(null).radius
+  private readonly bombConfig = bombConfig
+  private bombCharge = 0
   private bombReadyAnnounced = false
+  private bombBeatWindowUntil = 0
+  private bombBeatWindowActive = false
   private metronome = false
   private announcer!: Announcer
   private achievementSystem!: AchievementSystem
   private lastDashToggle = 0
   private dashActiveUntil = 0
   private dashDirection = new Phaser.Math.Vector2(0, 0)
-  private dashSpeed = 900
+  private movementTuning = getMovementTuning('vertical')
+  private dashTuning = getDashTuning()
+  private dashSpeedBase = this.dashTuning.speed
+  private dashSpeedCurrent = this.dashTuning.speed
   private lastBeatAt = 0
   private beatCount = 0
   private nextQuantizedShotAt = 0
@@ -266,6 +276,9 @@ export default class GameScene extends Phaser.Scene {
     this.crosshairMode = this.opts.crosshairMode
     this.verticalSafetyBand = !!this.opts.verticalSafetyBand
     this.gameplayMode = resolveGameplayMode(this.opts.gameplayMode)
+    this.movementTuning = getMovementTuning(this.gameplayMode)
+    this.dashSpeedBase = this.dashTuning.speed
+    this.dashSpeedCurrent = this.dashSpeedBase
     this.unlockMouseAim = !!this.opts.unlockMouseAim
     this.mouseNavigation = !!this.opts.mouseNavigation
     this.releaseFireMode = false
@@ -310,8 +323,7 @@ export default class GameScene extends Phaser.Scene {
     this.player.setVisible(false)
 
 // sätt en rimlig hitbox (matcha din PlayerSkin-storlek, t.ex. triangel ~18px)
-    const r = 14
-    this.player.body.setCircle(r, -r + this.player.width/2, -r + this.player.height/2)
+    this.applyPlayerHitbox(this.playerHitboxRadius)
 
 // rotationen behövs fortfarande – PlayerSkin följer host.rotation
     this.player.setRotation(Math.PI/2)
@@ -431,7 +443,7 @@ export default class GameScene extends Phaser.Scene {
 
       if (isMouse) {
         if (pointer.button === 2) {
-          if (this.bombCharge >= 100) this.triggerBomb()
+          this.tryTriggerBomb('pointer')
           return
         }
         if (pointer.button !== 0) return
@@ -525,6 +537,8 @@ export default class GameScene extends Phaser.Scene {
     this.bossMissPenalty = this.difficultyProfile.bossMissPenalty
     this.verticalLaneCount = this.difficultyProfile.laneCount
     this.enemyCap = this.currentStageConfig?.enemyCap ?? this.enemyCap
+    this.playerHitboxRadius = getHitboxTuning(this.difficultyProfile.id).radius
+    this.applyPlayerHitbox(this.playerHitboxRadius)
     
     // Initialize analyzer first
     this.analyzer = new AudioAnalyzer(this)
@@ -541,6 +555,9 @@ export default class GameScene extends Phaser.Scene {
       if (band === 'low') {
         this.beatCount += 1
         if (this.gameplayMode === 'vertical') this.triggerLaneHopperHop()
+        if (this.bombCharge >= this.bombConfig.chargeMax) {
+          this.openBombBeatWindow(timestamp)
+        }
       }
       const usingPattern = this.gameplayMode === 'vertical' && !!this.lanePattern
       if (usingPattern && !this.timeStopActive) {
@@ -746,8 +763,10 @@ export default class GameScene extends Phaser.Scene {
     this.hud.create()
     this.hud.setupHearts(this.playerMaxHp)
     this.hud.setHp(this.playerHp)
-    this.hud.setBombCharge(this.bombCharge / 100)
+    this.hud.setBombCharge(this.bombCharge / this.bombConfig.chargeMax)
+    this.hud.setBombBeatWindow(false)
     this.hud.setReducedMotion(this.reducedMotion)
+    this.hud.setHighContrast(!!this.opts.highContrast)
     this.hud.setDifficultyLabel(this.difficultyLabel)
     this.hud.setStage(this.currentStage)
     this.hud.setCrosshairMode(this.crosshairMode)
@@ -802,7 +821,7 @@ export default class GameScene extends Phaser.Scene {
     this.sound.play('hit_enemy', { volume: this.opts.sfxVolume })
     this.scoring.addKill(etype)
     this.achievementSystem.checkStatAchievement('enemies_defeated', this.scoring.getKills())
-    this.bumpBomb(10)
+    this.adjustBombCharge(this.bombConfig.killCharge, 'kill')
     this.maybeDropPickup(enemy.x, enemy.y)
 
     this.effects.enemyExplodeFx(enemy.x, enemy.y)
@@ -820,7 +839,7 @@ export default class GameScene extends Phaser.Scene {
         enemy.disableBody(true, true)
         this.sound.play('hit_enemy', { volume: this.opts.sfxVolume })
         this.scoring.addKill(etype)
-        this.bumpBomb(10)
+        this.adjustBombCharge(this.bombConfig.killCharge, 'kill')
         this.maybeDropPickup(enemy.x, enemy.y)
         const skin = enemy.getData('skin') as any
     skin?.onDeath?.()
@@ -861,7 +880,7 @@ export default class GameScene extends Phaser.Scene {
 
     // Bomb on SPACE when charged
     this.input.keyboard!.on('keydown-SPACE', () => {
-      if (this.bombCharge >= 100) this.triggerBomb()
+      this.tryTriggerBomb('keyboard')
     })
 
     this.input.keyboard!.on('keydown-E', () => {
@@ -896,6 +915,7 @@ export default class GameScene extends Phaser.Scene {
       this.announcer.setEnabled(true)
       this.effects.setReducedMotion(this.reducedMotion)
       this.hud.setReducedMotion(this.reducedMotion)
+      this.hud.setHighContrast(!!this.opts.highContrast)
       this.hud.setCrosshairMode(this.crosshairMode)
       this.hud.setDifficultyLabel(this.difficultyLabel)
       this.hud.setStage(this.currentStage)
@@ -947,6 +967,13 @@ export default class GameScene extends Phaser.Scene {
     }
 
     this.abilityService?.update(delta)
+
+    const bombWindowActive = this.isBombBeatWindowActive()
+    if (bombWindowActive) {
+      this.setBombBeatWindow(true)
+    } else if (this.bombBeatWindowActive) {
+      this.setBombBeatWindow(false)
+    }
 
       if (this.time.now - this.lastBeatAt < 100) { // Visa cirkeln i 100ms efter varje beat
         this.beatIndicator.setAlpha(1);
@@ -1042,8 +1069,11 @@ export default class GameScene extends Phaser.Scene {
         this.gamepadAbilityLatch[secondaryAbilityBinding.id] = pressed
       }
 
-      const bombPressed = pad.buttons[5]?.pressed || pad.buttons[7]?.pressed
-      if (bombPressed && this.bombCharge >= 100) this.triggerBomb()
+      const bombPressed = Boolean(pad.buttons[5]?.pressed || pad.buttons[7]?.pressed)
+      if (bombPressed && !this.gamepadBombLatch) {
+        this.tryTriggerBomb('gamepad')
+      }
+      this.gamepadBombLatch = bombPressed
     } else {
       if (this.gamepadFireActive) {
         this.gamepadFireActive = false
@@ -1103,34 +1133,54 @@ export default class GameScene extends Phaser.Scene {
 
     this.horizontalInputActive = Math.abs(moveX) > 0.1
 
-    const magnitude = Math.hypot(moveX, moveY)
-    if (magnitude > 1) {
-      moveX /= magnitude
-      moveY /= magnitude
+    const inputVector = new Phaser.Math.Vector2(moveX, moveY)
+    const magnitude = inputVector.length()
+    const hasInput = magnitude > 0.0001
+    let desiredVelocity = new Phaser.Math.Vector2(0, 0)
+    if (hasInput) {
+      const intensity = Math.min(1, magnitude)
+      const direction = inputVector.clone().normalize()
+      desiredVelocity = direction.scale(this.movementTuning.maxSpeed * intensity)
     }
 
-    const stageHeight = this.scale.height
-    const maxSpeed = this.gameplayMode === 'vertical'
-      ? stageHeight / 1
-      : this.scale.width / 1
-
-    let targetVelocity = new Phaser.Math.Vector2(moveX, moveY)
     const dashActive = this.time.now < this.dashActiveUntil && this.dashDirection.lengthSq() > 0
-    if (dashActive) {
-      targetVelocity = this.dashDirection.clone().normalize().scale(this.dashSpeed)
-    } else {
-      if (targetVelocity.lengthSq() > 1) targetVelocity.normalize()
-      targetVelocity.scale(maxSpeed)
+    if (!dashActive && this.dashSpeedCurrent !== this.dashSpeedBase) {
+      this.dashSpeedCurrent = this.dashSpeedBase
     }
 
-    const lerp = dashActive ? 1 : 0.2
-    let newVelX = dashActive ? targetVelocity.x : Phaser.Math.Linear(body.velocity.x, targetVelocity.x, lerp)
-    let newVelY = dashActive ? targetVelocity.y : Phaser.Math.Linear(body.velocity.y, targetVelocity.y, lerp)
-    if (!dashActive && targetVelocity.lengthSq() < 0.01) {
-      newVelX *= 0.82
-      newVelY *= 0.82
+    const deltaSeconds = Math.max(0, delta) / 1000
+    const currentVelocity = new Phaser.Math.Vector2(body.velocity.x, body.velocity.y)
+
+    if (dashActive) {
+      const dashDirection = this.dashDirection.lengthSq() > 0
+        ? this.dashDirection.clone().normalize()
+        : new Phaser.Math.Vector2(0, -1)
+      const dashVelocity = dashDirection.scale(this.dashSpeedCurrent)
+      body.setVelocity(dashVelocity.x, dashVelocity.y)
+    } else {
+      const accelerationRate = hasInput ? this.movementTuning.acceleration : this.movementTuning.deceleration
+      const maxDelta = accelerationRate * deltaSeconds
+      const velocityDelta = desiredVelocity.clone().subtract(currentVelocity)
+      const deltaLength = velocityDelta.length()
+      if (deltaLength > maxDelta && deltaLength > 0) {
+        velocityDelta.scale(maxDelta / deltaLength)
+      }
+      currentVelocity.add(velocityDelta)
+
+      if (!hasInput) {
+        const dragFactor = Math.max(0, 1 - this.movementTuning.drag * deltaSeconds)
+        currentVelocity.scale(dragFactor)
+        if (currentVelocity.length() < this.movementTuning.stopSpeed) {
+          currentVelocity.set(0, 0)
+        }
+      }
+
+      if (currentVelocity.length() > this.movementTuning.maxSpeed) {
+        currentVelocity.setLength(this.movementTuning.maxSpeed)
+      }
+
+      body.setVelocity(currentVelocity.x, currentVelocity.y)
     }
-    body.setVelocity(newVelX, newVelY)
 
     if (this.gameplayMode === 'vertical' && this.verticalSafetyBand) {
       const halfHeight = body.height * 0.5
@@ -1658,10 +1708,25 @@ pskin?.setThrust?.(thrustLevel)
       this.abilityBindings.push({ id: abilityId, key: keyName })
     })
 
+    const bindingHints = this.abilityService.getStates().map((state) => {
+      const binding = this.abilityBindings.find((entry) => entry.id === state.id)
+      const key = binding?.key?.toUpperCase()
+      const existingHint = state.inputHint ?? ''
+      let hint = existingHint
+      if (key) {
+        if (!existingHint || !existingHint.toUpperCase().includes(key)) {
+          hint = existingHint ? `${key} / ${existingHint}` : key
+        }
+      }
+      return { id: state.id, hint }
+    })
+    this.hud.setAbilityBindings(bindingHints)
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       listeners.forEach(({ event, handler }) => keyboard.off(event, handler, this))
       this.abilityBindings = []
       this.gamepadAbilityLatch = {}
+      this.gamepadBombLatch = false
     })
   }
 
@@ -1676,7 +1741,7 @@ pskin?.setThrust?.(thrustLevel)
     const durationMs = state.durationMs ?? 0
     switch (state.id) {
       case 'pulse_dash':
-        this.performPulseDash(Math.max(durationMs, 360))
+        this.performPulseDash(durationMs && durationMs > 0 ? durationMs : this.dashTuning.durationMs)
         break
       case 'overdrive':
         this.activateOverdrive(Math.max(durationMs, 5000))
@@ -1694,12 +1759,24 @@ pskin?.setThrust?.(thrustLevel)
       direction.normalize()
     }
 
+    const now = this.time.now
+    const dashConfig = this.dashTuning
+    const deltaFromBeat = now - this.lastBeatAt
+    const beatWindowMs = this.beatWindow.windowMs()
+    const perfectDash = Math.abs(deltaFromBeat) <= beatWindowMs
+    const dashSpeed = this.dashSpeedBase * (perfectDash ? dashConfig.perfectBonusMultiplier : 1)
+    const baseDuration = durationMs > 0 ? durationMs : dashConfig.durationMs
+    const dashDuration = Math.min(baseDuration, dashConfig.durationMs)
+
     this.dashDirection.copy(direction)
-    this.dashActiveUntil = this.time.now + durationMs
-    this.iframesUntil = Math.max(this.iframesUntil, this.time.now + durationMs + 120)
+    this.dashSpeedCurrent = dashSpeed
+    this.dashActiveUntil = now + dashDuration
+
+    const iframeDuration = Math.max(dashDuration, dashConfig.iframeMs) + 60
+    this.iframesUntil = Math.max(this.iframesUntil, now + iframeDuration)
 
     const body = this.player.body as Phaser.Physics.Arcade.Body
-    body.setVelocity(direction.x * this.dashSpeed, direction.y * this.dashSpeed)
+    body.setVelocity(direction.x * dashSpeed, direction.y * dashSpeed)
 
     const trail = this.add.graphics({ x: this.player.x, y: this.player.y }).setDepth(90)
     trail.fillStyle(0x66ffda, 0.4)
@@ -1708,18 +1785,42 @@ pskin?.setThrust?.(thrustLevel)
       targets: trail,
       alpha: 0,
       scale: 1.8,
-      duration: durationMs,
+      duration: dashDuration,
       ease: 'Cubic.easeOut',
       onComplete: () => trail.destroy()
     })
 
+    this.hud?.showDashFeedback(perfectDash ? 'perfect' : 'standard')
+    this.triggerDashVibration(perfectDash)
+    eventBus.emit('player:dash', {
+      perfect: perfectDash,
+      beatDeltaMs: deltaFromBeat,
+      dashDuration,
+      dashSpeed
+    })
     this.sound.play('ui_select', { volume: this.opts.sfxVolume * 0.6 })
+  }
+
+  private triggerDashVibration(perfect: boolean) {
+    const pad = this.activeGamepad
+    if (!pad) return
+    const actuator = (pad as any).vibration ?? (pad as any).vibrationActuator
+    if (!actuator || typeof actuator.playEffect !== 'function') return
+    try {
+      actuator.playEffect('dual-rumble', {
+        duration: perfect ? 220 : 160,
+        strongMagnitude: perfect ? 1 : 0.6,
+        weakMagnitude: perfect ? 0.75 : 0.45
+      })
+    } catch (_) {
+      // Some browsers expose the actuator but throw when vibration is unsupported.
+    }
   }
 
   private activateOverdrive(durationMs: number) {
     const seconds = Math.max(0.1, durationMs / 1000)
     this.powerups?.apply('rapid', seconds)
-    this.bumpBomb(5)
+    this.adjustBombCharge(this.bombConfig.overdriveBonus, 'overdrive')
     if (!this.reducedMotion) {
       this.cameras.main.flash(120, 255, 93, 177)
     }
@@ -2025,7 +2126,7 @@ pskin?.setThrust?.(thrustLevel)
     if (newHp <= 0) {
       this.sound.play('hit_enemy', { volume: this.opts.sfxVolume })
       this.scoring.addKill(etype)
-      this.bumpBomb(10)
+      this.adjustBombCharge(this.bombConfig.killCharge, 'kill')
       this.maybeDropPickup(enemy.x, enemy.y)
       this.effects.enemyExplodeFx(enemy.x, enemy.y)
       const bossFlag = isBoss
@@ -2040,11 +2141,13 @@ pskin?.setThrust?.(thrustLevel)
   private registerComboHit(enemy: Enemy) {
     const enemyId = enemy.getData('eid') as string | undefined
     const withinBeatWindow = this.beatClock ? this.beatClock.isWithinWindow(this.goodWindowMs) : true
-    if (this.time.now - this.lastHitAt > this.comboTimeoutMs || !withinBeatWindow) {
+    const comboExpired = this.time.now - this.lastHitAt > this.comboTimeoutMs || !withinBeatWindow
+    if (comboExpired) {
       if (this.comboCount > 0) {
         this.comboCount = 0
         this.scoring.resetCombo()
         eventBus.emit('combo:changed', { value: 0, multiplier: 1 })
+        this.adjustBombCharge(-this.bombConfig.comboDropPenalty, 'combo-drop')
       }
       this.lastHitEnemyId = null
     }
@@ -2065,6 +2168,8 @@ pskin?.setThrust?.(thrustLevel)
       this.scoring.updateCombo(this.comboCount, multiplier)
       eventBus.emit('combo:changed', { value: this.comboCount, multiplier })
       this.lastHitEnemyId = enemyId
+      const perfectBeat = this.isWithinBeatWindow(this.bombConfig.perfectWindowMs)
+      this.gainBombChargeFromCombo(perfectBeat)
     }
     this.lastHitAt = this.time.now
   }
@@ -2283,7 +2388,7 @@ pskin?.setThrust?.(thrustLevel)
     this.tapTimes.push(time)
     if (this.tapTimes.length >= 2) {
       this.tapTimes = []
-      if (this.bombCharge >= 100) this.triggerBomb()
+      this.tryTriggerBomb('touch')
     }
   }
 
@@ -2604,6 +2709,15 @@ pskin?.setThrust?.(thrustLevel)
         })
       }
     })
+  }
+
+  private applyPlayerHitbox(radius: number) {
+    if (!this.player?.body) return
+    const body = this.player.body as Phaser.Physics.Arcade.Body
+    const clamped = Math.max(4, radius)
+    const offsetX = -clamped + this.player.width / 2
+    const offsetY = -clamped + this.player.height / 2
+    body.setCircle(clamped, offsetX, offsetY)
   }
 
   private getAimDirection(): Phaser.Math.Vector2 {
@@ -3067,7 +3181,7 @@ pskin?.setThrust?.(thrustLevel)
     this.comboCount = 0;
     this.hud.setCombo(0);
     eventBus.emit('combo:changed', { value: 0, multiplier: 1 })
-    this.bumpBomb(-20);
+    this.adjustBombCharge(-this.bombConfig.damagePenalty, 'exploder')
     this.cleanupEnemy(enemy, false);
   }
 
@@ -3164,6 +3278,7 @@ pskin?.setThrust?.(thrustLevel)
     this.hud.setCombo(0)
     this.scoring.resetCombo()
     eventBus.emit('combo:changed', { value: 0, multiplier: 1 })
+    this.adjustBombCharge(-this.bombConfig.damagePenalty, 'player-hit')
     this.lastHitEnemyId = null
     this.scoring.registerMiss(isBoss ? this.bossMissPenalty : this.missPenalty)
     this.hud.showMissFeedback(isBoss ? 'Boss Escaped!' : 'Miss!')
@@ -3294,6 +3409,7 @@ pskin?.setThrust?.(thrustLevel)
       this.activeGamepad = undefined
       this.gamepadFireActive = false
       this.handleFireInputUp()
+      this.gamepadBombLatch = false
     }
   }
 
@@ -3322,39 +3438,142 @@ pskin?.setThrust?.(thrustLevel)
     })
   }
 
-  private triggerBomb() {
-    // Clear enemies in radius by disabling all
-    const group = this.spawner.getGroup()
-   /* group.children.each((e: Phaser.GameObjects.GameObject) => {
-      const s = e as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody
-      if (!s.active) return false
-      this.effects.explosion(s.x, s.y)
-      s.disableBody(true, true)
-      return true
-    })
-    */
-    group.children.each((e: Phaser.GameObjects.GameObject) => {
-      const s = e as Enemy
-      if (!s.active) return true
-      this.effects.explosion(s.x, s.y)
-      this.cleanupEnemy(s, true)   // ← viktigt, städar skin + bar
-      if (s.getData('isBoss') === true) this.onBossDown()
-      return true
-    })
-    this.sound.play('explode_big', { volume: this.opts.sfxVolume })
-    this.bumpBomb(-100)
+  private tryTriggerBomb(_source: 'keyboard' | 'gamepad' | 'pointer' | 'touch') {
+    if (this.bombCharge < this.bombConfig.chargeMax) {
+      this.hud.showBombFeedback('not-ready')
+      return
+    }
+
+    const delta = this.sampleBeatDelta()
+    if (!Number.isFinite(delta)) {
+      this.triggerBomb('good')
+      return
+    }
+
+    if (delta > this.bombConfig.activationWindowMs) {
+      this.handleBombBeatMiss()
+      return
+    }
+
+    const judgement: 'perfect' | 'good' = delta <= this.bombConfig.perfectWindowMs ? 'perfect' : 'good'
+    this.triggerBomb(judgement)
   }
 
-  private bumpBomb(delta: number) {
-    const previous = this.bombCharge
-    this.bombCharge = Phaser.Math.Clamp(this.bombCharge + delta, 0, 100)
-    this.hud.setBombCharge(this.bombCharge / 100)
-    if (this.bombCharge >= 100 && previous < 100 && !this.bombReadyAnnounced) {
-      this.announcer.playBombReady()
-      this.bombReadyAnnounced = true
-    } else if (this.bombCharge < 100) {
-      this.bombReadyAnnounced = false
+  private triggerBomb(judgement: 'perfect' | 'good') {
+    const group = this.spawner.getGroup()
+    const perfect = judgement === 'perfect'
+    group.children.each((e: Phaser.GameObjects.GameObject) => {
+      const enemy = e as Enemy
+      if (!enemy.active) return true
+      this.effects.explosion(enemy.x, enemy.y)
+      if (perfect) {
+        this.cleanupEnemy(enemy, true)
+        if (enemy.getData('isBoss') === true) this.onBossDown()
+        return true
+      }
+
+      const hp = (enemy.getData('hp') as number) ?? 0
+      const maxHp = (enemy.getData('maxHp') as number) ?? Math.max(hp, 1)
+      const damage = Math.max(1, Math.ceil(maxHp * 0.75))
+      const result = this.applyDamageToEnemy(enemy, damage, {
+        source: 'bomb',
+        judgement: 'normal',
+        registerCombo: false
+      })
+      if (result.killed && enemy.getData('isBoss') === true) {
+        this.onBossDown()
+      }
+      return true
+    })
+
+    this.adjustBombCharge(-this.bombConfig.chargeMax, 'detonate')
+    this.bombBeatWindowUntil = 0
+    this.setBombBeatWindow(false)
+
+    const feedback = perfect ? 'perfect' : 'good'
+    this.hud.showBombFeedback(feedback)
+    this.hud.flashBombDetonate(perfect ? 'perfect' : 'good')
+    this.announcer.playAudioKey('bomb_deployed', 2)
+    if (!this.reducedMotion) {
+      const color = perfect ? { r: 255, g: 214, b: 102 } : { r: 102, g: 229, b: 255 }
+      this.cameras.main.flash(perfect ? 220 : 160, color.r, color.g, color.b)
     }
+    this.sound.play('explode_big', { volume: this.opts.sfxVolume })
+  }
+
+  private adjustBombCharge(delta: number, _reason?: string) {
+    if (delta === 0) return
+    const previous = this.bombCharge
+    const max = this.bombConfig.chargeMax
+    const next = Phaser.Math.Clamp(previous + delta, 0, max)
+    if (next === previous) return
+
+    this.bombCharge = next
+    this.hud.setBombCharge(next / max)
+
+    if (next >= max && previous < max) {
+      if (!this.bombReadyAnnounced) {
+        this.announcer.playBombReady()
+        this.hud.showBombFeedback('ready')
+      }
+      this.bombReadyAnnounced = true
+    } else if (next < max && previous >= max) {
+      this.bombReadyAnnounced = false
+      this.bombBeatWindowUntil = 0
+      this.setBombBeatWindow(false)
+    }
+  }
+
+  private gainBombChargeFromCombo(perfect: boolean) {
+    const base = this.bombConfig.comboStep
+    const bonus = perfect ? this.bombConfig.comboPerfectBonus : 0
+    const streakBonus = Math.min(0.6, this.comboCount * 0.02)
+    const delta = (base + bonus) * (1 + streakBonus)
+    this.adjustBombCharge(delta, perfect ? 'combo-perfect' : 'combo')
+  }
+
+  private openBombBeatWindow(timestamp: number) {
+    if (this.bombCharge < this.bombConfig.chargeMax) return
+    this.bombBeatWindowUntil = timestamp + this.bombConfig.activationWindowMs
+    if (this.setBombBeatWindow(true)) {
+      this.hud.showBombFeedback('beat')
+    }
+  }
+
+  private handleBombBeatMiss() {
+    this.hud.showBombFeedback('miss')
+    this.adjustBombCharge(-this.bombConfig.missPenalty, 'beat-miss')
+    this.bombBeatWindowUntil = 0
+    this.setBombBeatWindow(false)
+    if (!this.reducedMotion) {
+      this.cameras.main.shake(140, 0.006)
+    }
+    this.sound.play('ui_back', { volume: this.opts.sfxVolume * 0.7 })
+  }
+
+  private isBombBeatWindowActive(): boolean {
+    return this.bombCharge >= this.bombConfig.chargeMax && this.time.now <= this.bombBeatWindowUntil
+  }
+
+  private setBombBeatWindow(active: boolean): boolean {
+    if (this.bombBeatWindowActive === active) return false
+    this.bombBeatWindowActive = active
+    this.hud.setBombBeatWindow(active)
+    return true
+  }
+
+  private sampleBeatDelta(): number {
+    if (!this.beatClock) return Number.POSITIVE_INFINITY
+    const since = Math.abs(this.beatClock.msSinceLastBeat())
+    const until = Math.abs(this.beatClock.msUntilNextBeat())
+    const finiteSince = Number.isFinite(since) ? since : Number.POSITIVE_INFINITY
+    const finiteUntil = Number.isFinite(until) ? until : Number.POSITIVE_INFINITY
+    return Math.min(finiteSince, finiteUntil)
+  }
+
+  private isWithinBeatWindow(windowMs: number): boolean {
+    const delta = this.sampleBeatDelta()
+    return Number.isFinite(delta) && delta <= windowMs
   }
 
   private drawHealthBar(enemy: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody) {

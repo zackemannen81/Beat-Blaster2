@@ -1,4 +1,5 @@
 import type { AbilityDefinition } from '../types/ability'
+import { playerMovementConfig } from './playerMovement'
 
 export const DEFAULT_ABILITY_IDS: string[] = ['pulse_dash', 'overdrive']
 
@@ -7,9 +8,9 @@ export const abilityDefinitions: Record<string, AbilityDefinition> = {
     id: 'pulse_dash',
     label: 'Pulse Dash',
     cooldownMs: 6000,
-    durationMs: 450,
+    durationMs: playerMovementConfig.dash.durationMs,
     tier: 1,
-    beatBonus: 'Perfect doubles dash distance',
+    beatBonus: 'Perfect dashes travel +45%',
     iconKey: 'ability_pulse_dash',
     description: 'Quickly dart forward, phasing through danger.',
     inputHint: 'Q / LB'

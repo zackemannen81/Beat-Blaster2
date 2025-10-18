@@ -37,6 +37,8 @@ Transform Beat Blaster’s prototype into a responsive, beat-synced combat exper
 
 ### In Progress
 - Shot accuracy now uses BeatClock timing; continue with combo multiplier formulas and UI feedback updates.
+- Player movement/dash rewrite underway: acceleration/drag curves live behind `playerMovementConfig`; validate beat-perfect dash multipliers next.
+- Bomb ultimate now charges via combo milestones and requires beat-synced input; monitor `bombConfig` tuning after next feel session.
 
 ### Run Result Integration
 - ResultScene updates profile stats/achievements via ProfileService. Follow up to remove legacy localStorage dependencies and feed currency/XP once economy lands.

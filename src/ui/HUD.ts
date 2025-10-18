@@ -19,6 +19,13 @@ type PowerupSlot = {
   durationMs: number
 }
 
+type AbilityBindingHint = {
+  id: string
+  hint: string
+}
+
+type BombFeedbackKind = 'not-ready' | 'ready' | 'beat' | 'perfect' | 'good' | 'miss'
+
 export default class HUD {
   private scene: Phaser.Scene
   private scoreText!: Phaser.GameObjects.Text
@@ -75,6 +82,12 @@ export default class HUD {
   private beatCoins = 0
   private beatWindowMs = 600
   private abilityOverlay?: AbilityOverlay
+  private dashFeedback?: Phaser.GameObjects.Text
+  private dashFeedbackBaseY = 0
+  private bombFeedback?: Phaser.GameObjects.Text
+  private bombFeedbackBaseY = 0
+  private lastBombFeedback: BombFeedbackKind | null = null
+  private highContrast = false
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene
@@ -120,6 +133,23 @@ export default class HUD {
     this.rhythmRing = new RhythmRing(this.scene, { reducedMotion: this.reducedMotion, colorblindMode: this.colorblindMode })
     this.rhythmRing.create(width / 2, height - 110)
     this.abilityOverlay = new AbilityOverlay(this.scene, { x: width - 120, y: height - 110 })
+    this.dashFeedbackBaseY = height - 168
+    this.dashFeedback = this.scene.add.text(width - 120, this.dashFeedbackBaseY, '', {
+      fontFamily: 'UiFont, sans-serif',
+      fontSize: '16px',
+      color: '#66ffda',
+      stroke: '#000',
+      strokeThickness: 3
+    }).setOrigin(0.5).setDepth(92).setAlpha(0).setScrollFactor(0)
+
+    this.bombFeedbackBaseY = height - 84
+    this.bombFeedback = this.scene.add.text(width - 120, this.bombFeedbackBaseY, '', {
+      fontFamily: 'UiFont, sans-serif',
+      fontSize: '18px',
+      color: '#ffd866',
+      stroke: '#000',
+      strokeThickness: 4
+    }).setOrigin(0.5).setDepth(92).setAlpha(0).setScrollFactor(0)
 
     eventBus.bindToScene(this.scene, 'beat:window', ({ windowMs }) => {
       this.beatWindowMs = windowMs
@@ -242,6 +272,10 @@ export default class HUD {
     this.abilityOverlay?.setBombCharge(pct)
   }
 
+  setBombBeatWindow(active: boolean) {
+    this.abilityOverlay?.setBombBeatWindow(active)
+  }
+
   setBeatCoins(total: number) {
     this.beatCoins = Math.max(0, Math.floor(total))
     if (this.beatCoinText) {
@@ -287,13 +321,13 @@ export default class HUD {
   showShotFeedback(quality: BeatJudgement, accuracy: AccuracyLevel) {
     if (!this.shotFeedback) return
     let text = 'On Beat'
-    let color = '#9ad2ff'
+    let color = this.highContrast ? '#ffffff' : '#9ad2ff'
     if (quality === 'perfect') {
       text = 'Perfect!'
-      color = '#66ffda'
+      color = this.highContrast ? '#ffffff' : '#66ffda'
     } else if (accuracy === 'Good') {
       text = 'Good'
-      color = '#ffd866'
+      color = this.highContrast ? '#ffe27a' : '#ffd866'
     }
     this.shotFeedback.setText(text)
     this.shotFeedback.setColor(color)
@@ -310,6 +344,57 @@ export default class HUD {
       ease: 'Sine.easeOut'
     })
     this.rhythmRing?.showJudgement(quality, accuracy)
+  }
+
+  showBombFeedback(kind: BombFeedbackKind) {
+    if (!this.bombFeedback) return
+    const allowRepeat = kind === 'beat' || kind === 'perfect' || kind === 'good'
+    if (!allowRepeat && this.lastBombFeedback === kind) return
+    this.lastBombFeedback = kind
+
+    const config: Record<BombFeedbackKind, { text: string; color: string }> = {
+      'not-ready': { text: 'Bomb not ready', color: '#9ad2ff' },
+      ready: { text: 'Bomb ready!', color: '#ffd866' },
+      beat: { text: 'Hit the beat!', color: '#66ffda' },
+      perfect: { text: 'Perfect detonation!', color: '#fff4b8' },
+      good: { text: 'Bomb detonated', color: '#9ad2ff' },
+      miss: { text: 'Off-beat!', color: '#ff6b6b' }
+    }
+
+    const entry = config[kind]
+    const color = this.highContrast
+      ? (kind === 'miss' ? '#ff9da4' : '#ffffff')
+      : entry.color
+    this.bombFeedback.setText(entry.text)
+    this.bombFeedback.setColor(color)
+    this.bombFeedback.setAlpha(1)
+    this.bombFeedback.setY(this.bombFeedbackBaseY)
+    this.scene.tweens.killTweensOf(this.bombFeedback)
+
+    if (this.reducedMotion) {
+      this.scene.time.delayedCall(320, () => {
+        this.bombFeedback?.setAlpha(0)
+        this.bombFeedback?.setY(this.bombFeedbackBaseY)
+      })
+      return
+    }
+
+    const duration = kind === 'perfect' ? 720 : 520
+    this.scene.tweens.add({
+      targets: this.bombFeedback,
+      alpha: 0,
+      y: this.bombFeedbackBaseY - 28,
+      duration,
+      ease: 'Quad.easeOut',
+      onComplete: () => {
+        this.bombFeedback?.setAlpha(0)
+        this.bombFeedback?.setY(this.bombFeedbackBaseY)
+      }
+    })
+  }
+
+  flashBombDetonate(result: 'perfect' | 'good') {
+    this.abilityOverlay?.flashBombDetonate(result)
   }
 
   setStage(stage: number) {
@@ -361,6 +446,33 @@ export default class HUD {
     this.abilityOverlay?.setReducedMotion(flag)
   }
 
+  setHighContrast(flag: boolean) {
+    if (this.highContrast === flag) return
+    this.highContrast = flag
+    const scoreColor = flag ? '#ffe27a' : '#fff'
+    const multColor = flag ? '#ffffff' : '#a0e9ff'
+    const accColor = flag ? '#ffe27a' : '#fff'
+    const stageColor = flag ? '#ffe27a' : '#9ad2ff'
+    const crosshairColor = flag ? '#ffe27a' : '#9ad2ff'
+    const infoColor = flag ? '#ffffff' : '#9ad2ff'
+    this.scoreText.setColor(scoreColor)
+    this.multText.setColor(multColor)
+    this.accText.setColor(accColor)
+    this.stageText.setColor(stageColor)
+    this.crosshairText.setColor(crosshairColor)
+    this.comboText.setColor(flag ? '#ffe27a' : '#ffb300')
+    this.bpmText?.setColor(infoColor)
+    this.laneText?.setColor(infoColor)
+    this.beatCoinText?.setColor(flag ? '#ffe27a' : '#ffe27a')
+    if (this.bombBarBg) {
+      this.bombBarBg.setFillStyle(flag ? 0xffffff : 0x333333, flag ? 0.85 : 1)
+    }
+    if (this.bombBarFill) {
+      this.bombBarFill.setFillStyle(flag ? 0xffee8a : 0x00e5ff, 1)
+    }
+    this.abilityOverlay?.setHighContrast(flag)
+  }
+
   setDifficultyLabel(label: string) {
     this.difficultyLabel = label
     this.setStage(this.stageValue)
@@ -377,6 +489,45 @@ export default class HUD {
 
   updateAbilityState(state: AbilityState): void {
     this.abilityOverlay?.updateAbilityState(state)
+  }
+
+  setAbilityBindings(bindings: AbilityBindingHint[]): void {
+    this.abilityOverlay?.setAbilityBindings(bindings)
+  }
+
+  showDashFeedback(result: 'perfect' | 'standard'): void {
+    if (!this.dashFeedback) return
+    const label = result === 'perfect' ? 'Perfect Dash!' : 'Dash!'
+    const baseColor = result === 'perfect' ? '#ffd866' : '#66ffda'
+    const color = this.highContrast ? '#ffffff' : baseColor
+    const duration = result === 'perfect' ? 540 : 420
+
+    this.dashFeedback.setText(label)
+    this.dashFeedback.setColor(color)
+    this.dashFeedback.setAlpha(1)
+    this.dashFeedback.setScale(result === 'perfect' ? 1.05 : 1)
+    this.dashFeedback.setY(this.dashFeedbackBaseY)
+    this.scene.tweens.killTweensOf(this.dashFeedback)
+
+    if (this.reducedMotion) {
+      this.scene.time.delayedCall(260, () => {
+        this.dashFeedback?.setAlpha(0)
+        this.dashFeedback?.setY(this.dashFeedbackBaseY)
+      })
+      return
+    }
+
+    this.scene.tweens.add({
+      targets: this.dashFeedback,
+      alpha: 0,
+      y: this.dashFeedbackBaseY - 24,
+      duration,
+      ease: 'Quad.easeOut',
+      onComplete: () => {
+        this.dashFeedback?.setAlpha(0)
+        this.dashFeedback?.setY(this.dashFeedbackBaseY)
+      }
+    })
   }
 
   setCrosshairMode(mode: 'pointer' | 'fixed' | 'pad-relative') {
@@ -551,6 +702,10 @@ export default class HUD {
     this.shotFeedback?.setPosition(width / 2, height * 0.78)
     this.rhythmRing?.setPosition(width / 2, height - 110)
     this.abilityOverlay?.setPosition(width - 120, height - 110)
+    this.dashFeedbackBaseY = height - 168
+    this.dashFeedback?.setPosition(width - 120, this.dashFeedbackBaseY)
+    this.bombFeedbackBaseY = height - 84
+    this.bombFeedback?.setPosition(width - 120, this.bombFeedbackBaseY)
     this.layoutPowerupSlots()
   }
   private drawSideOrnaments(width: number, height: number) {

@@ -11,7 +11,16 @@ interface AbilitySlot {
   hint?: Phaser.GameObjects.Text
   bonus?: Phaser.GameObjects.Text
   tierText: Phaser.GameObjects.Text
+  statusText: Phaser.GameObjects.Text
+  bindingHint?: string
   state: AbilityState
+}
+
+type BombStatus = 'charging' | 'ready' | 'beat'
+
+type AbilityBindingHint = {
+  id: string
+  hint: string
 }
 
 export default class AbilityOverlay {
@@ -20,9 +29,15 @@ export default class AbilityOverlay {
   private bombContainer: Phaser.GameObjects.Container
   private bombGauge: Phaser.GameObjects.Graphics
   private bombPulse: Phaser.GameObjects.Graphics
+  private bombFlash: Phaser.GameObjects.Graphics
+  private bombChargeValue = 0
+  private bombStatus: BombStatus = 'charging'
+  private bombBeatActive = false
+  private bombPulseTween?: Phaser.Tweens.Tween
   private slots = new Map<string, AbilitySlot>()
   private order: string[] = []
   private reducedMotion = false
+  private highContrast = false
 
   constructor(scene: Phaser.Scene, position: { x: number; y: number }) {
     this.scene = scene
@@ -35,7 +50,8 @@ export default class AbilityOverlay {
     bombBg.setStrokeStyle(2, 0x1f4260, 0.9)
     this.bombGauge = scene.add.graphics()
     this.bombPulse = scene.add.graphics()
-    this.bombContainer.add([bombBg, this.bombGauge, this.bombPulse])
+    this.bombFlash = scene.add.graphics()
+    this.bombContainer.add([bombBg, this.bombGauge, this.bombFlash, this.bombPulse])
 
     const bombLabel = scene.add.text(0, 60, 'Bomb', {
       fontFamily: 'UiFont, sans-serif',
@@ -43,6 +59,7 @@ export default class AbilityOverlay {
       color: '#a0e9ff'
     }).setOrigin(0.5)
     this.bombContainer.add(bombLabel)
+    this.renderBombGauge()
   }
 
   setPosition(x: number, y: number): void {
@@ -56,31 +73,143 @@ export default class AbilityOverlay {
 
   setReducedMotion(flag: boolean): void {
     this.reducedMotion = flag
+    const targetStatus: BombStatus = this.bombChargeValue >= 1
+      ? (this.bombBeatActive ? 'beat' : 'ready')
+      : 'charging'
+    if (targetStatus !== 'charging') {
+      this.bombStatus = 'charging'
+      this.setBombStatus(targetStatus)
+    } else {
+      this.setBombStatus('charging')
+    }
+    this.renderBombGauge()
+  }
+
+  setHighContrast(flag: boolean): void {
+    if (this.highContrast === flag) return
+    this.highContrast = flag
+    this.slots.forEach((slot) => this.applyState(slot, slot.state))
+    this.renderBombGauge()
+    if (this.bombStatus !== 'charging') {
+      this.setBombStatus(this.bombStatus)
+    }
   }
 
   setBombCharge(pct: number): void {
-    const clamped = Phaser.Math.Clamp(pct, 0, 1)
-    this.bombGauge.clear()
-    this.bombGauge.lineStyle(6, clamped >= 1 ? 0xffd866 : 0x00e5ff, 0.95)
-    this.bombGauge.beginPath()
-    this.bombGauge.arc(0, 0, 42, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * clamped, false)
-    this.bombGauge.strokePath()
-
-    if (clamped >= 1) {
-      this.bombPulse.clear()
-      this.bombPulse.fillStyle(0xffd866, 0.35)
-      this.bombPulse.fillCircle(0, 0, 52)
-      if (!this.reducedMotion) {
-        this.scene.tweens.add({
-          targets: this.bombPulse,
-          alpha: 0,
-          scale: 1.2,
-          duration: 320,
-          ease: 'Cubic.easeOut',
-          onComplete: () => this.bombPulse.clear()
-        })
-      }
+    this.bombChargeValue = Phaser.Math.Clamp(pct, 0, 1)
+    if (this.bombChargeValue < 1) {
+      this.bombBeatActive = false
     }
+    const status: BombStatus = this.bombChargeValue >= 1
+      ? (this.bombBeatActive ? 'beat' : 'ready')
+      : 'charging'
+    this.setBombStatus(status)
+    this.renderBombGauge()
+    if (this.bombChargeValue < 1) {
+      this.bombFlash.clear()
+    }
+  }
+
+  setBombBeatWindow(active: boolean): void {
+    if (this.bombBeatActive === active) return
+    this.bombBeatActive = active
+    if (this.bombChargeValue >= 1) {
+      this.setBombStatus(active ? 'beat' : 'ready')
+      this.renderBombGauge()
+    }
+  }
+
+  flashBombDetonate(result: 'perfect' | 'good'): void {
+    this.bombFlash.clear()
+    const color = this.highContrast
+      ? 0xffffff
+      : result === 'perfect'
+        ? 0xfff4b8
+        : 0x9ad2ff
+    const startAlpha = result === 'perfect' ? 0.55 : 0.4
+    const targetScale = result === 'perfect' ? 1.26 : 1.18
+    this.bombFlash.setAlpha(1)
+    this.bombFlash.setScale(1)
+    this.bombFlash.fillStyle(color, startAlpha)
+    this.bombFlash.fillCircle(0, 0, 56)
+
+    if (this.reducedMotion) {
+      this.scene.time.delayedCall(220, () => {
+        this.bombFlash.clear()
+        this.bombFlash.setAlpha(1)
+        this.bombFlash.setScale(1)
+      })
+      return
+    }
+
+    this.scene.tweens.add({
+      targets: this.bombFlash,
+      alpha: { from: startAlpha, to: 0 },
+      scale: { from: 1, to: targetScale },
+      duration: result === 'perfect' ? 360 : 280,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        this.bombFlash.clear()
+        this.bombFlash.setAlpha(1)
+        this.bombFlash.setScale(1)
+      }
+    })
+  }
+
+  private setBombStatus(status: BombStatus): void {
+    if (this.bombStatus === status) return
+    this.bombStatus = status
+    this.bombPulse.clear()
+    this.bombPulse.setAlpha(1)
+    this.bombPulse.setScale(1)
+    this.bombFlash.setAlpha(1)
+    this.bombFlash.setScale(1)
+    if (this.bombPulseTween) {
+      this.bombPulseTween.stop()
+      this.bombPulseTween = undefined
+    }
+
+    if (status === 'charging') {
+      return
+    }
+
+    const fillColor = status === 'beat'
+      ? (this.highContrast ? 0xffffff : 0xffd866)
+      : (this.highContrast ? 0xffffff : 0x00e5ff)
+    const radius = status === 'beat' ? 50 : 48
+    const alpha = status === 'beat' ? 0.5 : 0.32
+    this.bombPulse.fillStyle(fillColor, alpha)
+    this.bombPulse.fillCircle(0, 0, radius)
+
+    if (this.reducedMotion) return
+
+    const duration = status === 'beat' ? 200 : 420
+    const scaleTo = status === 'beat' ? 1.12 : 1.08
+    const alphaTo = status === 'beat' ? alpha * 0.35 : alpha * 0.45
+    this.bombPulseTween = this.scene.tweens.add({
+      targets: this.bombPulse,
+      alpha: { from: alpha, to: alphaTo },
+      scale: { from: 1, to: scaleTo },
+      yoyo: true,
+      repeat: -1,
+      duration,
+      ease: 'Sine.easeInOut'
+    })
+  }
+
+  private renderBombGauge(): void {
+    const pct = Phaser.Math.Clamp(this.bombChargeValue, 0, 1)
+    const color = this.bombStatus === 'beat'
+      ? (this.highContrast ? 0xffffff : 0xffd866)
+      : this.bombStatus === 'ready'
+        ? (this.highContrast ? 0xffffff : 0x00e5ff)
+        : (this.highContrast ? 0x9ad2ff : 0x1f4260)
+    const alpha = this.bombStatus === 'charging' ? (this.highContrast ? 0.9 : 0.6) : 0.95
+    this.bombGauge.clear()
+    this.bombGauge.lineStyle(6, color, alpha)
+    this.bombGauge.beginPath()
+    this.bombGauge.arc(0, 0, 42, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct, false)
+    this.bombGauge.strokePath()
   }
 
   setAbilityStates(states: AbilityState[]): void {
@@ -113,14 +242,41 @@ export default class AbilityOverlay {
     this.applyState(slot, state)
   }
 
+  setAbilityBindings(bindings: AbilityBindingHint[]): void {
+    bindings.forEach((binding) => {
+      const slot = this.slots.get(binding.id)
+      if (!slot) return
+      slot.bindingHint = binding.hint.trim()
+      if (slot.hint) {
+        slot.hint.setText(slot.bindingHint || slot.hint.text)
+        slot.hint.setVisible(Boolean(slot.bindingHint))
+      } else if (slot.bindingHint) {
+        slot.hint = this.scene.add.text(0, 76, slot.bindingHint, {
+          fontFamily: 'UiFont, sans-serif',
+          fontSize: '12px',
+          color: '#7ddff2'
+        }).setOrigin(0.5)
+        slot.container.add(slot.hint)
+      }
+      if (slot.hint) {
+        slot.hint.setColor(this.highContrast ? '#ffe27a' : '#7ddff2')
+      }
+      if (slot.bonus) {
+        slot.bonus.setY(slot.hint && slot.hint.visible ? 94 : 86)
+      }
+    })
+  }
+
   flashBeat(): void {
     this.slots.forEach((slot) => {
       if (slot.state.status !== 'ready') return
       slot.glow.clear()
-      slot.glow.fillStyle(0x00e5ff, 0.45)
+      const glowColor = this.highContrast ? 0xffffff : 0x00e5ff
+      const glowAlpha = this.highContrast ? 0.55 : 0.45
+      slot.glow.fillStyle(glowColor, glowAlpha)
       slot.glow.fillCircle(0, 0, 58)
       if (this.reducedMotion) {
-        slot.glow.setAlpha(0.35)
+        slot.glow.setAlpha(glowAlpha * 0.8)
         return
       }
       this.scene.tweens.add({
@@ -143,8 +299,15 @@ export default class AbilityOverlay {
     bg.setStrokeStyle(2, 0x1f4260, 0.9)
     const active = this.scene.add.graphics()
     const cooldown = this.scene.add.graphics()
+    const statusText = this.scene.add.text(0, 0, '', {
+      fontFamily: 'UiFont, sans-serif',
+      fontSize: '16px',
+      color: '#ffffff',
+      stroke: '#000',
+      strokeThickness: 4
+    }).setOrigin(0.5).setDepth(5).setVisible(false)
 
-    container.add([glow, bg, active, cooldown])
+    container.add([glow, bg, active, cooldown, statusText])
 
     let icon: Phaser.GameObjects.Image | Phaser.GameObjects.Text | undefined
     if (state.iconKey && this.scene.textures.exists(state.iconKey)) {
@@ -210,6 +373,7 @@ export default class AbilityOverlay {
       hint,
       bonus,
       tierText,
+      statusText,
       state: { ...state }
     }
 
@@ -220,14 +384,17 @@ export default class AbilityOverlay {
   private applyState(slot: AbilitySlot, state: AbilityState): void {
     slot.state = { ...state }
     slot.label.setText(state.label)
+    slot.label.setColor(this.highContrast ? '#ffffff' : '#a0e9ff')
+    const hintText = slot.bindingHint ?? state.inputHint ?? ''
     if (slot.hint) {
-      slot.hint.setText(state.inputHint ?? '')
-      slot.hint.setVisible(Boolean(state.inputHint))
-    } else if (state.inputHint) {
-      slot.hint = this.scene.add.text(0, 76, state.inputHint, {
+      slot.hint.setText(hintText)
+      slot.hint.setVisible(Boolean(hintText))
+      slot.hint.setColor(this.highContrast ? '#ffe27a' : '#7ddff2')
+    } else if (hintText) {
+      slot.hint = this.scene.add.text(0, 76, hintText, {
         fontFamily: 'UiFont, sans-serif',
         fontSize: '12px',
-        color: '#7ddff2'
+        color: this.highContrast ? '#ffe27a' : '#7ddff2'
       }).setOrigin(0.5)
       slot.container.add(slot.hint)
     }
@@ -235,11 +402,12 @@ export default class AbilityOverlay {
     if (slot.bonus) {
       slot.bonus.setText(state.beatBonus ?? '')
       slot.bonus.setVisible(Boolean(state.beatBonus))
+      slot.bonus.setColor(this.highContrast ? '#ffffff' : '#7ddff2')
     } else if (state.beatBonus) {
-      slot.bonus = this.scene.add.text(0, slot.hint ? 94 : 86, state.beatBonus, {
+      slot.bonus = this.scene.add.text(0, (slot.hint && slot.hint.visible) ? 94 : 86, state.beatBonus, {
         fontFamily: 'UiFont, sans-serif',
         fontSize: '12px',
-        color: '#7ddff2',
+        color: this.highContrast ? '#ffffff' : '#7ddff2',
         align: 'center',
         wordWrap: { width: 120 }
       }).setOrigin(0.5)
@@ -247,9 +415,11 @@ export default class AbilityOverlay {
     }
 
     slot.tierText.setText(`T${state.tier}`)
+    slot.tierText.setColor(this.highContrast ? '#ffe27a' : '#ffd866')
     if (slot.bonus) {
       slot.bonus.setY(slot.hint && slot.hint.visible ? 94 : 86)
     }
+    this.updateSlotStatusText(slot)
     this.drawState(slot)
   }
 
@@ -261,29 +431,68 @@ export default class AbilityOverlay {
 
     if (status === 'active' && durationMs && durationMs > 0) {
       const fraction = Phaser.Math.Clamp(activeRemainingMs ?? 0, 0, durationMs) / durationMs
-      active.lineStyle(6, 0x66ffda, 0.95)
+      const color = this.highContrast ? 0xffffff : 0x66ffda
+      active.lineStyle(6, color, 0.95)
       active.beginPath()
       active.arc(0, 0, 40, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * fraction, false)
       active.strokePath()
     } else if (status === 'ready') {
-      cooldown.lineStyle(4, 0x66ffda, 0.95)
+      const color = this.highContrast ? 0xffffff : 0x66ffda
+      cooldown.lineStyle(4, color, 0.95)
       cooldown.strokeCircle(0, 0, 40)
     } else if (cooldownMs > 0) {
       const fraction = Phaser.Math.Clamp(remainingMs / cooldownMs, 0, 1)
-      cooldown.lineStyle(6, 0x395a7a, 0.85)
+      const color = this.highContrast ? 0xffffff : 0x395a7a
+      const alpha = this.highContrast ? 1 : 0.85
+      cooldown.lineStyle(6, color, alpha)
       cooldown.beginPath()
       cooldown.arc(0, 0, 40, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * fraction, false)
       cooldown.strokePath()
     }
 
     if (slot.icon && 'setTint' in slot.icon) {
-      if (status === 'ready') (slot.icon as Phaser.GameObjects.Image).setTint(0xffffff)
-      else if (status === 'active') (slot.icon as Phaser.GameObjects.Image).setTint(0x66ffda)
-      else (slot.icon as Phaser.GameObjects.Image).setTint(0x395a7a)
+      const readyTint = this.highContrast ? 0xffffff : 0xffffff
+      const activeTint = this.highContrast ? 0xffffcc : 0x66ffda
+      const cooldownTint = this.highContrast ? 0x9ad2ff : 0x395a7a
+      if (status === 'ready') (slot.icon as Phaser.GameObjects.Image).setTint(readyTint)
+      else if (status === 'active') (slot.icon as Phaser.GameObjects.Image).setTint(activeTint)
+      else (slot.icon as Phaser.GameObjects.Image).setTint(cooldownTint)
     } else if (slot.icon && 'setColor' in slot.icon) {
-      const color = status === 'ready' ? '#a0e9ff' : status === 'active' ? '#66ffda' : '#395a7a'
+      const color = status === 'ready'
+        ? (this.highContrast ? '#ffffff' : '#a0e9ff')
+        : status === 'active'
+          ? (this.highContrast ? '#fff4b8' : '#66ffda')
+          : (this.highContrast ? '#9ad2ff' : '#395a7a')
       ;(slot.icon as Phaser.GameObjects.Text).setColor(color)
     }
+  }
+
+  private updateSlotStatusText(slot: AbilitySlot): void {
+    const { status, remainingMs, activeRemainingMs } = slot.state
+    const formatter = (value: number | undefined) => {
+      if (!value || value <= 0) return '0s'
+      if (value >= 1000) {
+        return `${(value / 1000).toFixed(1)}s`
+      }
+      return `${Math.ceil(value)}ms`
+    }
+
+    let text = ''
+    let color = this.highContrast ? '#ffffff' : '#ffffff'
+    if (status === 'cooldown') {
+      text = formatter(remainingMs)
+      color = this.highContrast ? '#ffee8a' : '#ffee8a'
+    } else if (status === 'active') {
+      text = formatter(activeRemainingMs)
+      color = this.highContrast ? '#ffe27a' : '#66ffda'
+    } else if (status === 'ready') {
+      text = this.highContrast ? 'READY' : ''
+      color = this.highContrast ? '#ffffff' : '#ffffff'
+    }
+
+    slot.statusText.setText(text)
+    slot.statusText.setColor(color)
+    slot.statusText.setVisible(Boolean(text))
   }
 
   private layoutSlots(): void {
